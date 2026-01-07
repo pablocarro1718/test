@@ -94,6 +94,11 @@ def procesar_degiro():
             if cantidad == 0 and precio == 0:
                 continue
 
+            # Ignorar operaciones con importe 0 (derechos de suscripción sin valor)
+            # EXCEPTO las OPAs que procesamos aparte
+            if precio == 0 and isin not in OPAS:
+                continue
+
             # Determinar tipo de operación
             if cantidad < 0:
                 tipo_op = "SELL"
