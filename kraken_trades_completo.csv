@@ -1,0 +1,12 @@
+datetime,asset,side,amount_crypto,amount_eur,price_eur,source,nota
+2020-05-19,BTC,BUY,0.0282,248.0,8794.326241134751,manual_dashboard,Kraken UI screenshot
+2021-05-19,BTC,BUY,0.00779,250.0,32092.42618741977,manual_dashboard,Kraken UI screenshot
+2021-05-19,ETH,BUY,0.11117,250.0,2248.808131690204,manual_dashboard,Kraken UI screenshot
+2021-12-03,SOL,BUY,0.9389,200.0,213.01523058898712,manual_dashboard,Kraken UI screenshot
+2022-01-25,BTC,BUY,0.00606,196.46,32419.14191419142,manual_dashboard,Kraken UI screenshot
+2022-01-25,BTC,BUY,0.00012,3.83,31916.666666666668,manual_dashboard,Kraken UI screenshot
+2022-01-25,ETH,BUY,0.13909,300.75,2162.2690344381335,manual_dashboard,Kraken UI screenshot
+2022-01-25,SOL,BUY,1.19878,98.95,82.54225128881029,manual_dashboard,Kraken UI screenshot
+2023-02-02,BTC,BUY,0.00684,150.0,21929.82456140351,manual_dashboard,Kraken UI screenshot
+2023-02-02,ETH,BUY,0.09767,150.0,1535.78376164636,manual_dashboard,Kraken UI screenshot
+2023-04-23,BTC,BUY,0.00777,200.0,25740.02574002574,manual_dashboard,Kraken UI screenshot
