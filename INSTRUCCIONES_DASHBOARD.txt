@@ -1,0 +1,266 @@
+DASHBOARD DE POSICIONES ABIERTAS - Instrucciones
+
+================================================================================
+ESTRUCTURA DEL GOOGLE SHEET
+================================================================================
+
+Crear 4 hojas:
+1. Dashboard (métricas principales + gráficos)
+2. Posiciones (tabla detallada con precios en tiempo real)
+3. Flujos (para cálculo de TIR)
+4. Calendario (depósitos por mes)
+
+================================================================================
+HOJA 1: DASHBOARD
+================================================================================
+
+Celda A1: PORTFOLIO - POSICIONES ABIERTAS
+Celda A2: Última actualización: =NOW()
+
+--- MÉTRICAS PRINCIPALES (fila 4-8) ---
+
+A4: Métrica          B4: Valor                    C4:
+A5: Coste Total      B5: =Posiciones!E11          C5: €
+A6: Valor Actual     B6: =Posiciones!H11          C6: €
+A7: P&L              B7: =Posiciones!I11          C7: €
+A8: Rentabilidad     B8: =Posiciones!J11          C8: (formato %)
+A9: TIR Anualizada   B9: =XIRR(Flujos!B:B,Flujos!A:A)   C9: (formato %)
+
+--- COMPOSICIÓN POR TIPO (fila 12-15, para gráfico pie) ---
+
+A12: Tipo            B12: Valor
+A13: Crypto          B13: =SUMIF(Posiciones!C:C,"Crypto",Posiciones!H:H)
+A14: Stock           B14: =SUMIF(Posiciones!C:C,"Stock",Posiciones!H:H)
+A15: ETF             B15: =SUMIF(Posiciones!C:C,"ETF",Posiciones!H:H)
+
+[Crear gráfico circular con A13:B15]
+
+--- COMPOSICIÓN POR BROKER (fila 18-20, para gráfico pie) ---
+
+A18: Broker          B18: Valor
+A19: Kraken          B19: =SUMIF(Posiciones!B:B,"Kraken",Posiciones!H:H)
+A20: Fintual         B20: =SUMIF(Posiciones!B:B,"Fintual",Posiciones!H:H)
+
+[Crear gráfico circular con A19:B20]
+
+--- PERFORMANCE POR POSICIÓN (fila 23+, para gráfico barras) ---
+
+A23: Ticker          B23: P&L %
+A24: =Posiciones!A2  B24: =Posiciones!J2
+... (copiar para cada posición)
+
+[Crear gráfico de barras horizontales]
+
+
+================================================================================
+HOJA 2: POSICIONES
+================================================================================
+
+Fila 1 (cabeceras):
+A1: Ticker
+B1: Broker
+C1: Tipo
+D1: Cantidad
+E1: Coste (€)
+F1: Precio Medio (€)
+G1: Precio Actual (€)
+H1: Valor Actual (€)
+I1: P&L (€)
+J1: P&L (%)
+
+Fila 2 (BTC):
+A2: BTC
+B2: Kraken
+C2: Crypto
+D2: 0.05678
+E2: 1048.29
+F2: 18462.31
+G2: =IFERROR(GOOGLEFINANCE("BTCUSD","price")/GOOGLEFINANCE("CURRENCY:USDEUR"),0)
+H2: =D2*G2
+I2: =H2-E2
+J2: =IF(E2>0,I2/E2,0)
+
+Fila 3 (ETH):
+A3: ETH
+B3: Kraken
+C3: Crypto
+D3: 0.34793
+E3: 700.75
+F3: 2014.05
+G3: =IFERROR(GOOGLEFINANCE("ETHUSD","price")/GOOGLEFINANCE("CURRENCY:USDEUR"),0)
+H3: =D3*G3
+I3: =H3-E3
+J3: =IF(E3>0,I3/E3,0)
+
+Fila 4 (SOL):
+A4: SOL
+B4: Kraken
+C4: Crypto
+D4: 2.13768
+E4: 298.95
+F4: 139.85
+G4: =IFERROR(GOOGLEFINANCE("SOLUSD","price")/GOOGLEFINANCE("CURRENCY:USDEUR"),0)
+H4: =D4*G4
+I4: =H4-E4
+J4: =IF(E4>0,I4/E4,0)
+
+Fila 5 (NU):
+A5: NU
+B5: Fintual
+C5: Stock
+D5: 91.449629
+E5: 1009.61
+F5: 11.04
+G5: =IFERROR(GOOGLEFINANCE("NU","price")/GOOGLEFINANCE("CURRENCY:USDEUR"),0)
+H5: =D5*G5
+I5: =H5-E5
+J5: =IF(E5>0,I5/E5,0)
+
+Fila 6 (AMZN):
+A6: AMZN
+B6: Fintual
+C6: Stock
+D6: 5.998302
+E6: 1086.47
+F6: 181.13
+G6: =IFERROR(GOOGLEFINANCE("AMZN","price")/GOOGLEFINANCE("CURRENCY:USDEUR"),0)
+H6: =D6*G6
+I6: =H6-E6
+J6: =IF(E6>0,I6/E6,0)
+
+Fila 7 (SPY):
+A7: SPY
+B7: Fintual
+C7: ETF
+D7: 0.461054
+E7: 240.38
+F7: 521.37
+G7: =IFERROR(GOOGLEFINANCE("SPY","price")/GOOGLEFINANCE("CURRENCY:USDEUR"),0)
+H7: =D7*G7
+I7: =H7-E7
+J7: =IF(E7>0,I7/E7,0)
+
+Fila 8 (IEV):
+A8: IEV
+B8: Fintual
+C8: ETF
+D8: 20.544768
+E8: 1255.40
+F8: 61.11
+G8: =IFERROR(GOOGLEFINANCE("IEV","price")/GOOGLEFINANCE("CURRENCY:USDEUR"),0)
+H8: =D8*G8
+I8: =H8-E8
+J8: =IF(E8>0,I8/E8,0)
+
+Fila 9 (ARGT):
+A9: ARGT
+B9: Fintual
+C9: ETF
+D9: 15.990136
+E9: 1356.09
+F9: 84.81
+G9: =IFERROR(GOOGLEFINANCE("ARGT","price")/GOOGLEFINANCE("CURRENCY:USDEUR"),0)
+H9: =D9*G9
+I9: =H9-E9
+J9: =IF(E9>0,I9/E9,0)
+
+Fila 10 (AAPL):
+A10: AAPL
+B10: Fintual
+C10: Stock
+D10: 4.564051
+E10: 1193.89
+F10: 261.59
+G10: =IFERROR(GOOGLEFINANCE("AAPL","price")/GOOGLEFINANCE("CURRENCY:USDEUR"),0)
+H10: =D10*G10
+I10: =H10-E10
+J10: =IF(E10>0,I10/E10,0)
+
+Fila 11 (TOTAL):
+A11: TOTAL
+E11: =SUM(E2:E10)
+H11: =SUM(H2:H10)
+I11: =SUM(I2:I10)
+J11: =IF(E11>0,I11/E11,0)
+
+
+================================================================================
+HOJA 3: FLUJOS (para TIR)
+================================================================================
+
+A1: Fecha           B1: Flujo (€)      C1: Concepto
+A2: 2020-05-19      B2: -248           C2: Compra BTC
+A3: 2021-05-19      B3: -250           C3: Compra BTC
+A4: 2021-05-19      B4: -250           C4: Compra ETH
+A5: 2021-12-03      B5: -200           C5: Compra SOL
+A6: 2022-01-25      B6: -196.46        C6: Compra BTC
+A7: 2022-01-25      B7: -3.83          C7: Compra BTC
+A8: 2022-01-25      B8: -300.75        C8: Compra ETH
+A9: 2022-01-25      B9: -98.95         C9: Compra SOL
+A10: 2023-02-02     B10: -150          C10: Compra BTC
+A11: 2023-02-02     B11: -150          C11: Compra ETH
+A12: 2023-04-23     B12: -200          C12: Compra BTC
+A13: 2025-12-18     B13: -576.92       C13: Compra NU
+A14: 2025-12-18     B14: -192.31       C14: Compra NU
+A15: 2025-12-18     B15: -480.77       C15: Compra AMZN
+A16: 2025-12-18     B16: -240.38       C16: Compra SPY
+A17: 2025-12-18     B17: -240.38       C17: Compra NU
+A18: 2025-12-18     B18: -1255.40      C18: Compra IEV
+A19: 2025-12-18     B19: -1356.09      C19: Compra ARGT
+A20: 2025-12-18     B20: -605.70       C20: Compra AMZN
+A21: 2026-01-01     B21: -1193.89      C21: Compra AAPL
+A22: =TODAY()       B22: =Posiciones!H11   C22: Valor actual (para XIRR)
+
+
+================================================================================
+HOJA 4: CALENDARIO
+================================================================================
+
+A1: Mes             B1: Kraken (€)     C1: Fintual (€)    D1: Total (€)
+A2: 2020-05         B2: 248            C2: 0              D2: =B2+C2
+A3: 2021-05         B3: 500            C3: 0              D3: =B3+C3
+A4: 2021-12         B4: 200            C4: 0              D4: =B4+C4
+A5: 2022-01         B5: 599.99         C5: 0              D5: =B5+C5
+A6: 2023-02         B6: 300            C6: 0              D6: =B6+C6
+A7: 2023-04         B7: 200            C7: 0              D7: =B7+C7
+A8: 2025-12         B8: 0              C8: 4947.95        D8: =B8+C8
+A9: 2026-01         B9: 0              C9: 1193.89        D9: =B9+C9
+A10: TOTAL          B10: =SUM(B2:B9)   C10: =SUM(C2:C9)   D10: =SUM(D2:D9)
+
+[Crear gráfico de barras apiladas con el calendario]
+
+
+================================================================================
+INSTRUCCIONES PARA CREAR GRÁFICOS
+================================================================================
+
+1. GRÁFICO PIE - Composición por Tipo:
+   - Seleccionar A13:B15 en Dashboard
+   - Insertar → Gráfico → Circular
+   - Título: "Composición por Tipo de Activo"
+
+2. GRÁFICO PIE - Composición por Broker:
+   - Seleccionar A19:B20 en Dashboard
+   - Insertar → Gráfico → Circular
+   - Título: "Composición por Broker"
+
+3. GRÁFICO BARRAS - Performance por Posición:
+   - Seleccionar datos de Ticker y P&L% de Posiciones
+   - Insertar → Gráfico → Barras horizontales
+   - Título: "Rentabilidad por Posición"
+
+4. GRÁFICO BARRAS - Calendario de Depósitos:
+   - Seleccionar A1:D9 en Calendario
+   - Insertar → Gráfico → Columnas apiladas
+   - Título: "Depósitos por Mes"
+
+
+================================================================================
+FORMATO RECOMENDADO
+================================================================================
+
+- Columnas E, F, G, H, I: Formato moneda (€)
+- Columna J: Formato porcentaje (%)
+- Celda TIR: Formato porcentaje (%)
+- Cabeceras: Negrita, fondo azul oscuro, texto blanco
+- Fila TOTAL: Negrita, fondo gris claro
