@@ -35,10 +35,24 @@ FLUJOS_ABIERTOS = [
     ('2020-05-19', -248.00), ('2021-05-19', -250.00), ('2021-05-19', -250.00),
     ('2021-12-03', -200.00), ('2022-01-25', -196.46), ('2022-01-25', -3.83),
     ('2022-01-25', -300.75), ('2022-01-25', -98.95), ('2023-02-02', -150.00),
-    ('2023-02-02', -150.00), ('2023-04-23', -200.00), ('2025-12-18', -576.92),
-    ('2025-12-18', -192.31), ('2025-12-18', -480.77), ('2025-12-18', -240.38),
-    ('2025-12-18', -240.38), ('2025-12-18', -1255.40), ('2025-12-18', -1356.09),
-    ('2025-12-18', -605.70), ('2026-01-01', -1061.24),
+    ('2023-02-02', -150.00), ('2023-04-23', -200.00), ('2025-03-10', -1138.82),
+    ('2025-04-03', -927.31), ('2025-05-29', -1207.52), ('2025-10-24', -1335.43),
+    ('2025-12-15', -1372.11),
+]
+
+# Calendario de depositos por mes (Kraken en EUR, Fintual en EUR convertido)
+CALENDARIO_DEPOSITOS = [
+    ('2020-05', 248.00, 0.00),
+    ('2021-05', 500.00, 0.00),
+    ('2021-12', 200.00, 0.00),
+    ('2022-01', 599.99, 0.00),
+    ('2023-02', 300.00, 0.00),
+    ('2023-04', 200.00, 0.00),
+    ('2025-03', 0.00, 1138.82),
+    ('2025-04', 0.00, 927.31),
+    ('2025-05', 0.00, 1207.52),
+    ('2025-10', 0.00, 1335.43),
+    ('2025-12', 0.00, 1372.11),
 ]
 
 @st.cache_data
@@ -143,15 +157,23 @@ def tab_posiciones_abiertas():
     with col_chart1:
         st.subheader("Por Tipo de Activo")
         df_tipo = df.groupby('Tipo')['Valor (€)'].sum().reset_index()
-        fig = px.pie(df_tipo, values='Valor (€)', names='Tipo', color_discrete_sequence=px.colors.qualitative.Set2)
-        fig.update_traces(textposition='inside', textinfo='percent+label')
+        df_tipo['Valor_texto'] = df_tipo['Valor (€)'].apply(lambda x: f"€{x:,.2f}")
+        fig = px.pie(df_tipo, values='Valor (€)', names='Tipo',
+                     color_discrete_sequence=px.colors.qualitative.Set2,
+                     hover_data={'Valor_texto': True, 'Valor (€)': False})
+        fig.update_traces(textposition='inside', textinfo='percent+label',
+                         hovertemplate='<b>%{label}</b><br>%{customdata[0]}<extra></extra>')
         st.plotly_chart(fig, use_container_width=True)
 
     with col_chart2:
         st.subheader("Por Broker")
         df_broker = df.groupby('Broker')['Valor (€)'].sum().reset_index()
-        fig = px.pie(df_broker, values='Valor (€)', names='Broker', color_discrete_sequence=px.colors.qualitative.Pastel)
-        fig.update_traces(textposition='inside', textinfo='percent+label')
+        df_broker['Valor_texto'] = df_broker['Valor (€)'].apply(lambda x: f"€{x:,.2f}")
+        fig = px.pie(df_broker, values='Valor (€)', names='Broker',
+                     color_discrete_sequence=px.colors.qualitative.Pastel,
+                     hover_data={'Valor_texto': True, 'Valor (€)': False})
+        fig.update_traces(textposition='inside', textinfo='percent+label',
+                         hovertemplate='<b>%{label}</b><br>%{customdata[0]}<extra></extra>')
         st.plotly_chart(fig, use_container_width=True)
 
     # Grafico de barras P&L
@@ -162,7 +184,8 @@ def tab_posiciones_abiertas():
     fig = go.Figure(go.Bar(
         x=df_sorted['P&L (%)'], y=df_sorted['Ticker'], orientation='h',
         marker_color=colors, text=[f"{x:+.1f}%" for x in df_sorted['P&L (%)']],
-        textposition='outside'
+        textposition='outside',
+        hovertemplate='<b>%{y}</b><br>P&L: %{x:+.2f}%<extra></extra>'
     ))
     fig.update_layout(height=400, xaxis_title="P&L (%)", yaxis_title="")
     st.plotly_chart(fig, use_container_width=True)
@@ -194,6 +217,35 @@ def tab_posiciones_abiertas():
                 st.metric("Coste", f"€{c:,.2f}")
                 st.metric("Valor", f"€{v:,.2f}")
                 st.metric("P&L", f"€{p:+,.2f}", f"{pp:+.2f}%")
+
+    # Calendario de depositos
+    st.markdown("---")
+    st.subheader("Calendario de Depositos")
+
+    df_cal = pd.DataFrame(CALENDARIO_DEPOSITOS, columns=['Mes', 'Kraken (€)', 'Fintual (€)'])
+    df_cal['Total (€)'] = df_cal['Kraken (€)'] + df_cal['Fintual (€)']
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        name='Kraken', x=df_cal['Mes'], y=df_cal['Kraken (€)'],
+        marker_color='#636EFA',
+        hovertemplate='<b>Kraken</b><br>%{x}<br>€%{y:,.2f}<extra></extra>'
+    ))
+    fig.add_trace(go.Bar(
+        name='Fintual', x=df_cal['Mes'], y=df_cal['Fintual (€)'],
+        marker_color='#EF553B',
+        hovertemplate='<b>Fintual</b><br>%{x}<br>€%{y:,.2f}<extra></extra>'
+    ))
+    fig.update_layout(barmode='stack', xaxis_title='Mes', yaxis_title='Depositos (€)')
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Totales depositos
+    total_kraken = df_cal['Kraken (€)'].sum()
+    total_fintual = df_cal['Fintual (€)'].sum()
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Kraken", f"€{total_kraken:,.2f}")
+    col2.metric("Total Fintual", f"€{total_fintual:,.2f}")
+    col3.metric("Total Depositado", f"€{total_kraken + total_fintual:,.2f}")
 
     st.caption(f"EUR/USD: {eur_usd:.4f}")
 
@@ -281,6 +333,7 @@ def tab_historial():
     fig = px.bar(df_mes, x='mes', y='count', color='tipo_operacion',
                  barmode='group', color_discrete_map={'BUY': 'blue', 'SELL': 'green', 'DIVIDEND': 'orange'})
     fig.update_layout(xaxis_title="Mes", yaxis_title="Numero de operaciones")
+    fig.update_traces(hovertemplate='<b>%{x}</b><br>Operaciones: %{y}<extra></extra>')
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -369,22 +422,28 @@ def tab_analisis():
         orientation='h',
         marker_color=colors,
         text=[f"€{x:+,.0f}" for x in cerradas_sorted['pnl']],
-        textposition='outside'
+        textposition='outside',
+        hovertemplate='<b>%{y}</b><br>P&L: €%{x:,.2f}<extra></extra>'
     ))
     fig.update_layout(height=max(400, len(cerradas) * 25), xaxis_title="P&L (€)", yaxis_title="")
     st.plotly_chart(fig, use_container_width=True)
 
     # Rentabilidad por año
     st.markdown("---")
-    st.subheader("Rentabilidad por Año")
+    st.subheader("Ingresos por Ventas por Año")
 
     # Calcular ventas por año
     ventas_año = df[df['tipo_operacion'] == 'SELL'].groupby('año')['importe_neto_eur'].sum()
 
-    # Para calcular P&L necesitamos asociar ventas con compras - simplificamos mostrando ingresos
-    fig = px.bar(x=ventas_año.index, y=ventas_año.values,
-                 labels={'x': 'Año', 'y': 'Ingresos por Ventas (€)'},
-                 color_discrete_sequence=['#2ecc71'])
+    fig = go.Figure(go.Bar(
+        x=ventas_año.index,
+        y=ventas_año.values,
+        marker_color='#2ecc71',
+        text=[f"€{x:,.0f}" for x in ventas_año.values],
+        textposition='outside',
+        hovertemplate='<b>%{x}</b><br>Ingresos: €%{y:,.2f}<extra></extra>'
+    ))
+    fig.update_layout(xaxis_title="Año", yaxis_title="Ingresos por Ventas (€)")
     st.plotly_chart(fig, use_container_width=True)
 
     # Evolucion de inversiones
@@ -397,6 +456,7 @@ def tab_analisis():
     fig = px.line(df_sorted, x='fecha', y='flujo_acumulado',
                   labels={'fecha': 'Fecha', 'flujo_acumulado': 'Flujo Neto Acumulado (€)'})
     fig.add_hline(y=0, line_dash="dash", line_color="gray")
+    fig.update_traces(hovertemplate='<b>%{x}</b><br>Flujo: €%{y:,.2f}<extra></extra>')
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -425,18 +485,30 @@ def tab_dividendos():
     st.subheader("Dividendos por Ticker")
     div_ticker = dividendos.groupby('ticker')['importe_neto_eur'].sum().sort_values(ascending=False)
 
-    fig = px.bar(x=div_ticker.index, y=div_ticker.values,
-                 labels={'x': 'Ticker', 'y': 'Total Dividendos (€)'},
-                 color_discrete_sequence=['#f39c12'])
+    fig = go.Figure(go.Bar(
+        x=div_ticker.index,
+        y=div_ticker.values,
+        marker_color='#f39c12',
+        text=[f"€{x:,.2f}" for x in div_ticker.values],
+        textposition='outside',
+        hovertemplate='<b>%{x}</b><br>Dividendos: €%{y:,.2f}<extra></extra>'
+    ))
+    fig.update_layout(xaxis_title="Ticker", yaxis_title="Total Dividendos (€)")
     st.plotly_chart(fig, use_container_width=True)
 
     # Por año
     st.subheader("Dividendos por Año")
     div_año = dividendos.groupby('año')['importe_neto_eur'].sum()
 
-    fig = px.bar(x=div_año.index, y=div_año.values,
-                 labels={'x': 'Año', 'y': 'Total Dividendos (€)'},
-                 color_discrete_sequence=['#e67e22'])
+    fig = go.Figure(go.Bar(
+        x=div_año.index,
+        y=div_año.values,
+        marker_color='#e67e22',
+        text=[f"€{x:,.2f}" for x in div_año.values],
+        textposition='outside',
+        hovertemplate='<b>%{x}</b><br>Dividendos: €%{y:,.2f}<extra></extra>'
+    ))
+    fig.update_layout(xaxis_title="Año", yaxis_title="Total Dividendos (€)")
     st.plotly_chart(fig, use_container_width=True)
 
     # Tabla detalle
