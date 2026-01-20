@@ -256,6 +256,31 @@ def tab_historial():
 
     df = cargar_datos()
 
+    # Obtener precios actuales para posiciones abiertas
+    precios = obtener_precios()
+    eur_usd = precios.get('EURUSD=X', 1.0)
+
+    # Calcular valor actual de posiciones abiertas
+    valor_posiciones_abiertas = 0
+    coste_posiciones_abiertas = 0
+    datos_abiertos = []
+    for ticker, info in POSICIONES.items():
+        precio_usd = precios.get(info['symbol'], 0)
+        precio_eur = precio_usd / eur_usd if eur_usd > 0 else 0
+        valor = info['cantidad'] * precio_eur
+        valor_posiciones_abiertas += valor
+        coste_posiciones_abiertas += info['coste_eur']
+        pnl = valor - info['coste_eur']
+        pnl_pct = (pnl / info['coste_eur'] * 100) if info['coste_eur'] > 0 else 0
+        datos_abiertos.append({
+            'Ticker': ticker, 'Broker': info['broker'], 'Tipo': info['tipo'],
+            'Cantidad': info['cantidad'], 'Coste (€)': info['coste_eur'],
+            'Precio (€)': precio_eur, 'Valor (€)': valor,
+            'P&L (€)': pnl, 'P&L (%)': pnl_pct
+        })
+
+    pnl_no_realizado = valor_posiciones_abiertas - coste_posiciones_abiertas
+
     # Sidebar de filtros
     st.sidebar.header("Filtros")
 
@@ -291,7 +316,7 @@ def tab_historial():
     if ticker_buscar:
         df_filtrado = df_filtrado[df_filtrado['ticker'].str.contains(ticker_buscar, na=False)]
 
-    # Metricas resumen
+    # Metricas resumen del historial
     total_ops = len(df_filtrado)
     compras = df_filtrado[df_filtrado['tipo_operacion'] == 'BUY']['importe_neto_eur'].sum()
     ventas = df_filtrado[df_filtrado['tipo_operacion'] == 'SELL']['importe_neto_eur'].sum()
@@ -300,12 +325,36 @@ def tab_historial():
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Operaciones", f"{total_ops}")
     col2.metric("Compras", f"€{abs(compras):,.2f}")
-    col3.metric("Ventas", f"€{ventas:,.2f}")
+    col3.metric("Ventas Realizadas", f"€{ventas:,.2f}")
     col4.metric("Dividendos", f"€{dividendos:,.2f}")
 
     st.markdown("---")
 
+    # Resumen global: Invertido vs Recuperado (incluyendo posiciones abiertas)
+    st.subheader("Resumen Global de Inversiones")
+
+    total_invertido = abs(compras)
+    total_recuperado_ventas = ventas + dividendos
+    pnl_realizado = total_recuperado_ventas - (total_invertido - coste_posiciones_abiertas)
+    valor_total_actual = total_recuperado_ventas + valor_posiciones_abiertas
+    pnl_total = pnl_realizado + pnl_no_realizado
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Invertido", f"€{total_invertido:,.2f}")
+    col2.metric("Ventas + Dividendos", f"€{total_recuperado_ventas:,.2f}")
+    col3.metric("Valor Posiciones Abiertas", f"€{valor_posiciones_abiertas:,.2f}")
+
+    col4, col5, col6 = st.columns(3)
+    pnl_realizado_pct = (pnl_realizado / (total_invertido - coste_posiciones_abiertas) * 100) if (total_invertido - coste_posiciones_abiertas) > 0 else 0
+    pnl_no_realizado_pct = (pnl_no_realizado / coste_posiciones_abiertas * 100) if coste_posiciones_abiertas > 0 else 0
+    col4.metric("P&L Realizado", f"€{pnl_realizado:+,.2f}", f"{pnl_realizado_pct:+.2f}%")
+    col5.metric("P&L No Realizado", f"€{pnl_no_realizado:+,.2f}", f"{pnl_no_realizado_pct:+.2f}%")
+    col6.metric("P&L Total", f"€{pnl_total:+,.2f}")
+
+    st.markdown("---")
+
     # Tabla de operaciones
+    st.subheader("Historial de Operaciones")
     cols_mostrar = ['fecha', 'broker', 'tipo_operacion', 'tipo_activo', 'ticker',
                     'cantidad', 'precio_unitario', 'moneda_original', 'importe_eur',
                     'comisiones_eur', 'importe_neto_eur', 'notas']
@@ -319,11 +368,31 @@ def tab_historial():
                           'Cantidad', 'Precio', 'Moneda', 'Importe €',
                           'Comision €', 'Neto €', 'Notas']
 
-    st.dataframe(df_mostrar, use_container_width=True, hide_index=True, height=500)
+    st.dataframe(df_mostrar, use_container_width=True, hide_index=True, height=400)
 
     # Boton descargar
     csv = df_filtrado.to_csv(index=False)
     st.download_button("Descargar CSV filtrado", csv, "operaciones_filtradas.csv", "text/csv")
+
+    # Posiciones Abiertas con valor actual
+    st.markdown("---")
+    st.subheader("Posiciones Abiertas (Valor Actual)")
+
+    df_abiertos = pd.DataFrame(datos_abiertos)
+    df_abiertos_display = df_abiertos.copy()
+    df_abiertos_display['Cantidad'] = df_abiertos_display['Cantidad'].apply(lambda x: f"{x:,.6f}" if x < 1 else f"{x:,.2f}")
+    for col in ['Coste (€)', 'Precio (€)', 'Valor (€)']:
+        df_abiertos_display[col] = df_abiertos_display[col].apply(lambda x: f"€{x:,.2f}")
+    df_abiertos_display['P&L (€)'] = df_abiertos_display['P&L (€)'].apply(lambda x: f"€{x:+,.2f}")
+    df_abiertos_display['P&L (%)'] = df_abiertos_display['P&L (%)'].apply(lambda x: f"{x:+.2f}%")
+
+    st.dataframe(df_abiertos_display, use_container_width=True, hide_index=True)
+
+    # Totales posiciones abiertas
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Coste Total", f"€{coste_posiciones_abiertas:,.2f}")
+    col2.metric("Valor Actual", f"€{valor_posiciones_abiertas:,.2f}")
+    col3.metric("P&L No Realizado", f"€{pnl_no_realizado:+,.2f}", f"{pnl_no_realizado_pct:+.2f}%")
 
     # Grafico operaciones por mes
     st.markdown("---")
