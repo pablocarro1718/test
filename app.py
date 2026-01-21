@@ -17,7 +17,7 @@ st.set_page_config(
 # Ruta al archivo CSV
 CSV_PATH = os.path.join(os.path.dirname(__file__), 'inversiones_unificadas.csv')
 
-# Datos de posiciones abiertas (Kraken + Fintual)
+# Datos de posiciones abiertas (Kraken + Fintual + IBKR)
 POSICIONES = {
     'BTC': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.05678, 'coste_eur': 1048.29, 'symbol': 'BTC-USD'},
     'ETH': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.34793, 'coste_eur': 700.75, 'symbol': 'ETH-USD'},
@@ -28,6 +28,8 @@ POSICIONES = {
     'IEV': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 20.544768, 'coste_eur': 1255.40, 'symbol': 'IEV'},
     'ARGT': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 15.990136, 'coste_eur': 1356.09, 'symbol': 'ARGT'},
     'AAPL': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 4.564051, 'coste_eur': 1061.24, 'symbol': 'AAPL'},
+    'CSU': {'broker': 'IBKR', 'tipo': 'Stock', 'cantidad': 0.1506, 'coste_eur': 288.37, 'symbol': 'CSU.TO'},
+    'URA': {'broker': 'IBKR', 'tipo': 'ETF', 'cantidad': 10.0, 'coste_eur': 530.87, 'symbol': 'URA'},
 }
 
 # Flujos para calculo de TIR de posiciones abiertas
@@ -37,22 +39,23 @@ FLUJOS_ABIERTOS = [
     ('2022-01-25', -300.75), ('2022-01-25', -98.95), ('2023-02-02', -150.00),
     ('2023-02-02', -150.00), ('2023-04-23', -200.00), ('2025-03-10', -1138.82),
     ('2025-04-03', -927.31), ('2025-05-29', -1207.52), ('2025-10-24', -1335.43),
-    ('2025-12-15', -1372.11),
+    ('2025-12-15', -1372.11), ('2026-01-01', -1639.00),
 ]
 
-# Calendario de depositos por mes (Kraken en EUR, Fintual en EUR convertido)
+# Calendario de depositos por mes (Kraken, Fintual, IBKR en EUR)
 CALENDARIO_DEPOSITOS = [
-    ('2020-05', 248.00, 0.00),
-    ('2021-05', 500.00, 0.00),
-    ('2021-12', 200.00, 0.00),
-    ('2022-01', 599.99, 0.00),
-    ('2023-02', 300.00, 0.00),
-    ('2023-04', 200.00, 0.00),
-    ('2025-03', 0.00, 1138.82),
-    ('2025-04', 0.00, 927.31),
-    ('2025-05', 0.00, 1207.52),
-    ('2025-10', 0.00, 1335.43),
-    ('2025-12', 0.00, 1372.11),
+    ('2020-05', 248.00, 0.00, 0.00),
+    ('2021-05', 500.00, 0.00, 0.00),
+    ('2021-12', 200.00, 0.00, 0.00),
+    ('2022-01', 599.99, 0.00, 0.00),
+    ('2023-02', 300.00, 0.00, 0.00),
+    ('2023-04', 200.00, 0.00, 0.00),
+    ('2025-03', 0.00, 1138.82, 0.00),
+    ('2025-04', 0.00, 927.31, 0.00),
+    ('2025-05', 0.00, 1207.52, 0.00),
+    ('2025-10', 0.00, 1335.43, 0.00),
+    ('2025-12', 0.00, 1372.11, 0.00),
+    ('2026-01', 0.00, 0.00, 1639.00),
 ]
 
 @st.cache_data
@@ -222,8 +225,8 @@ def tab_posiciones_abiertas():
     st.markdown("---")
     st.subheader("Calendario de Depositos")
 
-    df_cal = pd.DataFrame(CALENDARIO_DEPOSITOS, columns=['Mes', 'Kraken (€)', 'Fintual (€)'])
-    df_cal['Total (€)'] = df_cal['Kraken (€)'] + df_cal['Fintual (€)']
+    df_cal = pd.DataFrame(CALENDARIO_DEPOSITOS, columns=['Mes', 'Kraken (€)', 'Fintual (€)', 'IBKR (€)'])
+    df_cal['Total (€)'] = df_cal['Kraken (€)'] + df_cal['Fintual (€)'] + df_cal['IBKR (€)']
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
@@ -236,16 +239,23 @@ def tab_posiciones_abiertas():
         marker_color='#EF553B',
         hovertemplate='<b>Fintual</b><br>%{x}<br>€%{y:,.2f}<extra></extra>'
     ))
+    fig.add_trace(go.Bar(
+        name='IBKR', x=df_cal['Mes'], y=df_cal['IBKR (€)'],
+        marker_color='#00CC96',
+        hovertemplate='<b>IBKR</b><br>%{x}<br>€%{y:,.2f}<extra></extra>'
+    ))
     fig.update_layout(barmode='stack', xaxis_title='Mes', yaxis_title='Depositos (€)')
     st.plotly_chart(fig, use_container_width=True)
 
     # Totales depositos
     total_kraken = df_cal['Kraken (€)'].sum()
     total_fintual = df_cal['Fintual (€)'].sum()
-    col1, col2, col3 = st.columns(3)
+    total_ibkr = df_cal['IBKR (€)'].sum()
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Kraken", f"€{total_kraken:,.2f}")
     col2.metric("Total Fintual", f"€{total_fintual:,.2f}")
-    col3.metric("Total Depositado", f"€{total_kraken + total_fintual:,.2f}")
+    col3.metric("Total IBKR", f"€{total_ibkr:,.2f}")
+    col4.metric("Total Depositado", f"€{total_kraken + total_fintual + total_ibkr:,.2f}")
 
     st.caption(f"EUR/USD: {eur_usd:.4f}")
 
@@ -336,20 +346,24 @@ def tab_historial():
     total_invertido = abs(compras)
     total_recuperado_ventas = ventas + dividendos
     pnl_realizado = total_recuperado_ventas - (total_invertido - coste_posiciones_abiertas)
-    valor_total_actual = total_recuperado_ventas + valor_posiciones_abiertas
+    total_ventas_mas_abiertas = total_recuperado_ventas + valor_posiciones_abiertas
     pnl_total = pnl_realizado + pnl_no_realizado
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Invertido", f"€{total_invertido:,.2f}")
-    col2.metric("Ventas + Dividendos", f"€{total_recuperado_ventas:,.2f}")
-    col3.metric("Valor Posiciones Abiertas", f"€{valor_posiciones_abiertas:,.2f}")
-
-    col4, col5, col6 = st.columns(3)
     pnl_realizado_pct = (pnl_realizado / (total_invertido - coste_posiciones_abiertas) * 100) if (total_invertido - coste_posiciones_abiertas) > 0 else 0
     pnl_no_realizado_pct = (pnl_no_realizado / coste_posiciones_abiertas * 100) if coste_posiciones_abiertas > 0 else 0
-    col4.metric("P&L Realizado", f"€{pnl_realizado:+,.2f}", f"{pnl_realizado_pct:+.2f}%")
-    col5.metric("P&L No Realizado", f"€{pnl_no_realizado:+,.2f}", f"{pnl_no_realizado_pct:+.2f}%")
-    col6.metric("P&L Total", f"€{pnl_total:+,.2f}")
+    pnl_total_pct = (pnl_total / total_invertido * 100) if total_invertido > 0 else 0
+
+    # Orden: Total Invertido | Ventas+Abiertas | P&L Realizado
+    #        P&L No Realizado | P&L Total | Valor Posiciones
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Invertido", f"€{total_invertido:,.2f}")
+    col2.metric("Ventas + Pos. Abiertas", f"€{total_ventas_mas_abiertas:,.2f}")
+    col3.metric("P&L Realizado", f"€{pnl_realizado:+,.2f}", f"{pnl_realizado_pct:+.2f}%")
+
+    col4, col5, col6 = st.columns(3)
+    col4.metric("P&L No Realizado", f"€{pnl_no_realizado:+,.2f}", f"{pnl_no_realizado_pct:+.2f}%")
+    col5.metric("P&L Total", f"€{pnl_total:+,.2f}", f"{pnl_total_pct:+.2f}%")
+    col6.metric("Valor Posiciones Abiertas", f"€{valor_posiciones_abiertas:,.2f}")
 
     st.markdown("---")
 
