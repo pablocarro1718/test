@@ -14,6 +14,40 @@ st.set_page_config(
     layout="wide"
 )
 
+# ============== AUTENTICACION ==============
+def check_password():
+    """Verifica la contraseña antes de mostrar la app"""
+
+    def password_entered():
+        """Comprueba si la contraseña es correcta"""
+        if st.session_state["password"] == st.secrets.get("password", "portfolio2024"):
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # No guardar la contraseña
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # Primera visita - mostrar formulario
+        st.title("🔐 Portfolio Dashboard")
+        st.text_input(
+            "Contraseña", type="password", on_change=password_entered, key="password"
+        )
+        st.info("Introduce la contraseña para acceder al dashboard")
+        return False
+
+    elif not st.session_state["password_correct"]:
+        # Contraseña incorrecta
+        st.title("🔐 Portfolio Dashboard")
+        st.text_input(
+            "Contraseña", type="password", on_change=password_entered, key="password"
+        )
+        st.error("Contraseña incorrecta")
+        return False
+
+    else:
+        # Contraseña correcta
+        return True
+
 # Ruta al archivo CSV
 CSV_PATH = os.path.join(os.path.dirname(__file__), 'inversiones_unificadas.csv')
 
@@ -610,6 +644,10 @@ def tab_dividendos():
 # ============== MAIN ==============
 
 def main():
+    # Verificar contraseña primero
+    if not check_password():
+        return
+
     st.title("📊 Mi Portfolio de Inversiones")
 
     # Pestañas
