@@ -10,9 +10,23 @@ import time
 import os
 from datetime import datetime
 
-# Configuración - En producción usar variables de entorno o secrets
-IBKR_TOKEN = os.environ.get('IBKR_TOKEN', '217289636331680501112352')
-IBKR_QUERY_ID = os.environ.get('IBKR_QUERY_ID', '1384190')
+# Configuración - Las claves se cargan desde variables de entorno
+# Crear archivo .env con: IBKR_TOKEN=xxx e IBKR_QUERY_ID=xxx
+from dotenv import load_dotenv
+load_dotenv()  # Carga variables desde .env si existe
+
+IBKR_TOKEN = os.environ.get('IBKR_TOKEN')
+IBKR_QUERY_ID = os.environ.get('IBKR_QUERY_ID')
+
+def check_credentials():
+    """Verifica que las credenciales estén configuradas"""
+    if not IBKR_TOKEN or not IBKR_QUERY_ID:
+        print("❌ Error: Credenciales no configuradas")
+        print("   Crea un archivo .env con:")
+        print("   IBKR_TOKEN=tu_token_aqui")
+        print("   IBKR_QUERY_ID=tu_query_id_aqui")
+        return False
+    return True
 
 # URLs de IBKR Flex Query
 FLEX_REQUEST_URL = "https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.SendRequest"
@@ -235,6 +249,10 @@ def sync_ibkr_transactions(output_path: str = 'inversiones_unificadas.csv'):
     print("=" * 50)
     print("🏦 IBKR Flex Query Sync")
     print("=" * 50)
+
+    # Verificar credenciales
+    if not check_credentials():
+        return None, None
 
     try:
         # Paso 1: Solicitar statement

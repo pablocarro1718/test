@@ -1,5 +1,12 @@
 # Secrets - NUNCA subir a GitHub
 .streamlit/secrets.toml
+.env
+
+# Archivos de datos generados localmente
+ibkr_raw_response.txt
+ibkr_transactions.csv
+ibkr_deposits.csv
+kraken_transactions.csv
 
 # Python
 __pycache__/
