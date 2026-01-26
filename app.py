@@ -7,51 +7,39 @@ import plotly.graph_objects as go
 from scipy.optimize import brentq
 import os
 
-# Configuracion de pagina
+# ============== CONFIGURACION ==============
 st.set_page_config(
     page_title="Portfolio Dashboard",
-    page_icon="📈",
+    page_icon="📊",
     layout="wide"
 )
 
 # ============== AUTENTICACION ==============
 def check_password():
     """Verifica la contraseña antes de mostrar la app"""
-
     def password_entered():
-        """Comprueba si la contraseña es correcta"""
         if st.session_state["password"] == st.secrets.get("password", "portfolio2024"):
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # No guardar la contraseña
+            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        # Primera visita - mostrar formulario
         st.title("🔐 Portfolio Dashboard")
-        st.text_input(
-            "Contraseña", type="password", on_change=password_entered, key="password"
-        )
+        st.text_input("Contraseña", type="password", on_change=password_entered, key="password")
         st.info("Introduce la contraseña para acceder al dashboard")
         return False
-
     elif not st.session_state["password_correct"]:
-        # Contraseña incorrecta
         st.title("🔐 Portfolio Dashboard")
-        st.text_input(
-            "Contraseña", type="password", on_change=password_entered, key="password"
-        )
+        st.text_input("Contraseña", type="password", on_change=password_entered, key="password")
         st.error("Contraseña incorrecta")
         return False
+    return True
 
-    else:
-        # Contraseña correcta
-        return True
-
-# Ruta al archivo CSV
+# ============== DATOS ==============
 CSV_PATH = os.path.join(os.path.dirname(__file__), 'inversiones_unificadas.csv')
 
-# Datos de posiciones abiertas (Kraken + Fintual + IBKR)
+# Posiciones abiertas actuales
 POSICIONES = {
     'BTC': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.05678, 'coste_eur': 1048.29, 'symbol': 'BTC-USD'},
     'ETH': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.34793, 'coste_eur': 700.75, 'symbol': 'ETH-USD'},
@@ -62,50 +50,49 @@ POSICIONES = {
     'IEV': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 20.544768, 'coste_eur': 1255.40, 'symbol': 'IEV'},
     'ARGT': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 15.990136, 'coste_eur': 1356.09, 'symbol': 'ARGT'},
     'AAPL': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 4.564051, 'coste_eur': 1061.24, 'symbol': 'AAPL'},
-    'CSU': {'broker': 'IBKR', 'tipo': 'Stock', 'cantidad': 0.1506, 'coste_eur': 288.37, 'symbol': 'CSU.TO'},
+    'CSU': {'broker': 'IBKR', 'tipo': 'Stock', 'cantidad': 0.3543, 'coste_eur': 596.00, 'symbol': 'CSU.TO'},
     'URA': {'broker': 'IBKR', 'tipo': 'ETF', 'cantidad': 10.0, 'coste_eur': 530.87, 'symbol': 'URA'},
 }
 
-# Flujos para calculo de TIR de posiciones abiertas
+# Historial de depósitos (fecha, broker, cantidad, moneda)
+DEPOSITOS = [
+    {'fecha': '2020-05-19', 'broker': 'Kraken', 'cantidad': 248.00, 'moneda': 'EUR'},
+    {'fecha': '2021-03-02', 'broker': 'Kraken', 'cantidad': 500.00, 'moneda': 'EUR'},
+    {'fecha': '2021-12-03', 'broker': 'Kraken', 'cantidad': 200.00, 'moneda': 'EUR'},
+    {'fecha': '2022-01-25', 'broker': 'Kraken', 'cantidad': 600.00, 'moneda': 'EUR'},
+    {'fecha': '2022-06-20', 'broker': 'Kraken', 'cantidad': 500.00, 'moneda': 'EUR'},
+    {'fecha': '2025-03-10', 'broker': 'Fintual', 'cantidad': 1138.82, 'moneda': 'EUR'},
+    {'fecha': '2025-04-03', 'broker': 'Fintual', 'cantidad': 927.31, 'moneda': 'EUR'},
+    {'fecha': '2025-05-29', 'broker': 'Fintual', 'cantidad': 1207.52, 'moneda': 'EUR'},
+    {'fecha': '2025-10-24', 'broker': 'Fintual', 'cantidad': 1335.43, 'moneda': 'EUR'},
+    {'fecha': '2025-12-15', 'broker': 'Fintual', 'cantidad': 1372.11, 'moneda': 'EUR'},
+    {'fecha': '2026-01-02', 'broker': 'IBKR', 'cantidad': 30000.00, 'moneda': 'MXN'},
+    {'fecha': '2026-01-23', 'broker': 'IBKR', 'cantidad': 1000.00, 'moneda': 'EUR'},
+]
+
+# Flujos para TIR
 FLUJOS_ABIERTOS = [
-    ('2020-05-19', -248.00), ('2021-05-19', -250.00), ('2021-05-19', -250.00),
-    ('2021-12-03', -200.00), ('2022-01-25', -196.46), ('2022-01-25', -3.83),
-    ('2022-01-25', -300.75), ('2022-01-25', -98.95), ('2023-02-02', -150.00),
-    ('2023-02-02', -150.00), ('2023-04-23', -200.00), ('2025-03-10', -1138.82),
-    ('2025-04-03', -927.31), ('2025-05-29', -1207.52), ('2025-10-24', -1335.43),
-    ('2025-12-15', -1372.11), ('2026-01-01', -1639.00),
+    ('2020-05-19', -248.00), ('2021-03-02', -500.00), ('2021-12-03', -200.00),
+    ('2022-01-25', -600.00), ('2022-06-20', -500.00),
+    ('2025-03-10', -1138.82), ('2025-04-03', -927.31), ('2025-05-29', -1207.52),
+    ('2025-10-24', -1335.43), ('2025-12-15', -1372.11),
+    ('2026-01-02', -1639.00), ('2026-01-23', -1000.00),
 ]
 
-# Calendario de depositos por mes (Kraken, Fintual, IBKR en EUR)
-CALENDARIO_DEPOSITOS = [
-    ('2020-05', 248.00, 0.00, 0.00),
-    ('2021-05', 500.00, 0.00, 0.00),
-    ('2021-12', 200.00, 0.00, 0.00),
-    ('2022-01', 599.99, 0.00, 0.00),
-    ('2023-02', 300.00, 0.00, 0.00),
-    ('2023-04', 200.00, 0.00, 0.00),
-    ('2025-03', 0.00, 1138.82, 0.00),
-    ('2025-04', 0.00, 927.31, 0.00),
-    ('2025-05', 0.00, 1207.52, 0.00),
-    ('2025-10', 0.00, 1335.43, 0.00),
-    ('2025-12', 0.00, 1372.11, 0.00),
-    ('2026-01', 0.00, 0.00, 1639.00),
-]
-
+# ============== FUNCIONES AUXILIARES ==============
 @st.cache_data
 def cargar_datos():
-    """Carga el CSV de inversiones unificadas"""
+    """Carga el CSV de inversiones"""
     df = pd.read_csv(CSV_PATH)
     df['fecha'] = pd.to_datetime(df['fecha'])
     df['año'] = df['fecha'].dt.year
-    df['mes'] = df['fecha'].dt.to_period('M').astype(str)
     return df
 
 @st.cache_data(ttl=300)
 def obtener_precios():
-    """Obtiene precios actuales de Yahoo Finance"""
-    symbols = [p['symbol'] for p in POSICIONES.values()]
-    symbols.append('EURUSD=X')
+    """Obtiene precios de Yahoo Finance"""
+    symbols = list(set([p['symbol'] for p in POSICIONES.values()]))
+    symbols.extend(['EURUSD=X', 'SPY', 'CADEUR=X'])
 
     precios = {}
     for symbol in symbols:
@@ -114,11 +101,24 @@ def obtener_precios():
             hist = ticker.history(period='1d')
             if not hist.empty:
                 precios[symbol] = hist['Close'].iloc[-1]
-            else:
-                precios[symbol] = 0
         except:
             precios[symbol] = 0
     return precios
+
+@st.cache_data(ttl=3600)
+def obtener_ytd_benchmark():
+    """Obtiene datos YTD del S&P500"""
+    try:
+        spy = yf.Ticker('SPY')
+        inicio_año = f"{datetime.now().year}-01-01"
+        hist = spy.history(start=inicio_año)
+        if not hist.empty:
+            precio_inicio = hist['Close'].iloc[0]
+            hist['return_pct'] = (hist['Close'] / precio_inicio - 1) * 100
+            return hist[['Close', 'return_pct']]
+    except:
+        pass
+    return pd.DataFrame()
 
 def calcular_xirr(flujos, valor_final):
     """Calcula la TIR (XIRR)"""
@@ -127,7 +127,6 @@ def calcular_xirr(flujos, valor_final):
 
     fechas = [datetime.strptime(f[0], '%Y-%m-%d') if isinstance(f[0], str) else f[0] for f in flujos]
     valores = [f[1] for f in flujos]
-
     fechas.append(datetime.now())
     valores.append(valor_final)
 
@@ -142,210 +141,252 @@ def calcular_xirr(flujos, valor_final):
     except:
         return 0
 
-# ============== PESTAÑAS ==============
+def calcular_metricas_globales(df, precios, eur_usd):
+    """Calcula todas las métricas globales del portfolio"""
 
-def tab_posiciones_abiertas():
-    """Pestaña 1: Posiciones Abiertas con precios en tiempo real"""
-    st.header("Posiciones Abiertas")
-    st.caption(f"Ultima actualizacion: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-    with st.spinner('Obteniendo precios en tiempo real...'):
-        precios = obtener_precios()
-
-    eur_usd = precios.get('EURUSD=X', 1.0)
-
-    # Calcular valores
-    datos = []
+    # Valor posiciones abiertas
+    valor_abiertas = 0
+    coste_abiertas = 0
     for ticker, info in POSICIONES.items():
         precio_usd = precios.get(info['symbol'], 0)
-        precio_eur = precio_usd / eur_usd if eur_usd > 0 else 0
-        valor = info['cantidad'] * precio_eur
-        pnl = valor - info['coste_eur']
-        pnl_pct = (pnl / info['coste_eur'] * 100) if info['coste_eur'] > 0 else 0
+        if info['symbol'] == 'CSU.TO':
+            cad_eur = precios.get('CADEUR=X', 0.68)
+            precio_eur = precio_usd * cad_eur
+        else:
+            precio_eur = precio_usd / eur_usd if eur_usd > 0 else 0
+        valor_abiertas += info['cantidad'] * precio_eur
+        coste_abiertas += info['coste_eur']
 
-        datos.append({
-            'Ticker': ticker, 'Broker': info['broker'], 'Tipo': info['tipo'],
-            'Cantidad': info['cantidad'], 'Coste (€)': info['coste_eur'],
-            'Precio (€)': precio_eur, 'Valor (€)': valor,
-            'P&L (€)': pnl, 'P&L (%)': pnl_pct
-        })
+    # Operaciones cerradas (ventas)
+    ventas = df[df['tipo_operacion'] == 'SELL']['importe_neto_eur'].sum()
+    dividendos = df[df['tipo_operacion'] == 'DIVIDEND']['importe_neto_eur'].sum()
+    compras = abs(df[df['tipo_operacion'] == 'BUY']['importe_neto_eur'].sum())
 
-    df = pd.DataFrame(datos)
+    # Métricas
+    total_invertido = compras
+    valor_actual = ventas + dividendos + valor_abiertas
+    realized_pnl = ventas + dividendos - (compras - coste_abiertas)
+    unrealized_pnl = valor_abiertas - coste_abiertas
+    tir = calcular_xirr(FLUJOS_ABIERTOS, valor_abiertas)
 
-    # Metricas principales
-    coste_total = df['Coste (€)'].sum()
-    valor_total = df['Valor (€)'].sum()
-    pnl_total = df['P&L (€)'].sum()
-    pnl_pct_total = (pnl_total / coste_total * 100) if coste_total > 0 else 0
-    tir = calcular_xirr(FLUJOS_ABIERTOS, valor_total)
+    return {
+        'total_invertido': total_invertido,
+        'valor_actual': valor_actual,
+        'ventas_totales': ventas,
+        'dividendos': dividendos,
+        'realized_pnl': realized_pnl,
+        'unrealized_pnl': unrealized_pnl,
+        'valor_abiertas': valor_abiertas,
+        'coste_abiertas': coste_abiertas,
+        'tir': tir
+    }
+
+# ============== TAB 1: RESUMEN ==============
+def tab_resumen():
+    """Dashboard principal con métricas clave"""
+
+    with st.spinner('Cargando datos...'):
+        df = cargar_datos()
+        precios = obtener_precios()
+        eur_usd = precios.get('EURUSD=X', 1.08)
+        m = calcular_metricas_globales(df, precios, eur_usd)
+
+    # Métricas principales en una fila
+    st.markdown("### Métricas Principales")
 
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Coste Total", f"€{coste_total:,.2f}")
-    col2.metric("Valor Actual", f"€{valor_total:,.2f}")
-    col3.metric("P&L", f"€{pnl_total:,.2f}", f"{pnl_pct_total:+.2f}%")
-    col4.metric("Rentabilidad", f"{pnl_pct_total:+.2f}%")
-    col5.metric("TIR Anualizada", f"{tir*100:+.2f}%")
+
+    col1.metric(
+        "Total Invertido",
+        f"€{m['total_invertido']:,.0f}"
+    )
+    col2.metric(
+        "Valor Actual",
+        f"€{m['valor_actual']:,.0f}",
+        f"{((m['valor_actual']/m['total_invertido'])-1)*100:+.1f}%" if m['total_invertido'] > 0 else ""
+    )
+    col3.metric(
+        "Realized P&L",
+        f"€{m['realized_pnl']:+,.0f}"
+    )
+    col4.metric(
+        "Unrealized P&L",
+        f"€{m['unrealized_pnl']:+,.0f}",
+        f"{(m['unrealized_pnl']/m['coste_abiertas'])*100:+.1f}%" if m['coste_abiertas'] > 0 else ""
+    )
+    col5.metric(
+        "TIR",
+        f"{m['tir']*100:+.1f}%"
+    )
 
     st.markdown("---")
 
-    # Graficos
-    col_chart1, col_chart2 = st.columns(2)
+    # Resumen por broker
+    st.markdown("### Por Broker")
 
-    with col_chart1:
-        st.subheader("Por Tipo de Activo")
-        df_tipo = df.groupby('Tipo')['Valor (€)'].sum().reset_index()
-        df_tipo['Valor_texto'] = df_tipo['Valor (€)'].apply(lambda x: f"€{x:,.2f}")
-        fig = px.pie(df_tipo, values='Valor (€)', names='Tipo',
-                     color_discrete_sequence=px.colors.qualitative.Set2,
-                     hover_data={'Valor_texto': True, 'Valor (€)': False})
-        fig.update_traces(textposition='inside', textinfo='percent+label',
-                         hovertemplate='<b>%{label}</b><br>%{customdata[0]}<extra></extra>')
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col_chart2:
-        st.subheader("Por Broker")
-        df_broker = df.groupby('Broker')['Valor (€)'].sum().reset_index()
-        df_broker['Valor_texto'] = df_broker['Valor (€)'].apply(lambda x: f"€{x:,.2f}")
-        fig = px.pie(df_broker, values='Valor (€)', names='Broker',
-                     color_discrete_sequence=px.colors.qualitative.Pastel,
-                     hover_data={'Valor_texto': True, 'Valor (€)': False})
-        fig.update_traces(textposition='inside', textinfo='percent+label',
-                         hovertemplate='<b>%{label}</b><br>%{customdata[0]}<extra></extra>')
-        st.plotly_chart(fig, use_container_width=True)
-
-    # Grafico de barras P&L
-    st.subheader("Rentabilidad por Posicion")
-    df_sorted = df.sort_values('P&L (%)', ascending=True)
-    colors = ['green' if x >= 0 else 'red' for x in df_sorted['P&L (%)']]
-
-    fig = go.Figure(go.Bar(
-        x=df_sorted['P&L (%)'], y=df_sorted['Ticker'], orientation='h',
-        marker_color=colors, text=[f"{x:+.1f}%" for x in df_sorted['P&L (%)']],
-        textposition='outside',
-        hovertemplate='<b>%{y}</b><br>P&L: %{x:+.2f}%<extra></extra>'
-    ))
-    fig.update_layout(height=400, xaxis_title="P&L (%)", yaxis_title="")
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Tabla detalle
-    st.subheader("Detalle de Posiciones")
-    df_display = df.copy()
-    df_display['Cantidad'] = df_display['Cantidad'].apply(lambda x: f"{x:,.6f}" if x < 1 else f"{x:,.2f}")
-    for col in ['Coste (€)', 'Precio (€)', 'Valor (€)']:
-        df_display[col] = df_display[col].apply(lambda x: f"€{x:,.2f}")
-    df_display['P&L (€)'] = df_display['P&L (€)'].apply(lambda x: f"€{x:+,.2f}")
-    df_display['P&L (%)'] = df_display['P&L (%)'].apply(lambda x: f"{x:+.2f}%")
-
-    st.dataframe(df_display, use_container_width=True, hide_index=True)
-
-    # Metricas por tipo
-    st.markdown("---")
-    st.subheader("Desglose por Tipo")
-    cols = st.columns(3)
-    for i, tipo in enumerate(['Crypto', 'Stock', 'ETF']):
-        df_t = df[df['Tipo'] == tipo]
-        if not df_t.empty:
-            with cols[i]:
-                c = df_t['Coste (€)'].sum()
-                v = df_t['Valor (€)'].sum()
-                p = v - c
-                pp = (p / c * 100) if c > 0 else 0
-                st.markdown(f"### {tipo}")
-                st.metric("Coste", f"€{c:,.2f}")
-                st.metric("Valor", f"€{v:,.2f}")
-                st.metric("P&L", f"€{p:+,.2f}", f"{pp:+.2f}%")
-
-    # Calendario de depositos
-    st.markdown("---")
-    st.subheader("Calendario de Depositos")
-
-    df_cal = pd.DataFrame(CALENDARIO_DEPOSITOS, columns=['Mes', 'Kraken (€)', 'Fintual (€)', 'IBKR (€)'])
-    df_cal['Total (€)'] = df_cal['Kraken (€)'] + df_cal['Fintual (€)'] + df_cal['IBKR (€)']
-
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        name='Kraken', x=df_cal['Mes'], y=df_cal['Kraken (€)'],
-        marker_color='#636EFA',
-        hovertemplate='<b>Kraken</b><br>%{x}<br>€%{y:,.2f}<extra></extra>'
-    ))
-    fig.add_trace(go.Bar(
-        name='Fintual', x=df_cal['Mes'], y=df_cal['Fintual (€)'],
-        marker_color='#EF553B',
-        hovertemplate='<b>Fintual</b><br>%{x}<br>€%{y:,.2f}<extra></extra>'
-    ))
-    fig.add_trace(go.Bar(
-        name='IBKR', x=df_cal['Mes'], y=df_cal['IBKR (€)'],
-        marker_color='#00CC96',
-        hovertemplate='<b>IBKR</b><br>%{x}<br>€%{y:,.2f}<extra></extra>'
-    ))
-    fig.update_layout(barmode='stack', xaxis_title='Mes', yaxis_title='Depositos (€)')
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Totales depositos
-    total_kraken = df_cal['Kraken (€)'].sum()
-    total_fintual = df_cal['Fintual (€)'].sum()
-    total_ibkr = df_cal['IBKR (€)'].sum()
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Kraken", f"€{total_kraken:,.2f}")
-    col2.metric("Total Fintual", f"€{total_fintual:,.2f}")
-    col3.metric("Total IBKR", f"€{total_ibkr:,.2f}")
-    col4.metric("Total Depositado", f"€{total_kraken + total_fintual + total_ibkr:,.2f}")
-
-    st.caption(f"EUR/USD: {eur_usd:.4f}")
-
-
-def tab_historial():
-    """Pestaña 2: Historial completo con filtros"""
-    st.header("Historial de Operaciones")
-
-    df = cargar_datos()
-
-    # Obtener precios actuales para posiciones abiertas
-    precios = obtener_precios()
-    eur_usd = precios.get('EURUSD=X', 1.0)
-
-    # Calcular valor actual de posiciones abiertas
-    valor_posiciones_abiertas = 0
-    coste_posiciones_abiertas = 0
-    datos_abiertos = []
+    broker_data = []
     for ticker, info in POSICIONES.items():
         precio_usd = precios.get(info['symbol'], 0)
-        precio_eur = precio_usd / eur_usd if eur_usd > 0 else 0
+        if info['symbol'] == 'CSU.TO':
+            cad_eur = precios.get('CADEUR=X', 0.68)
+            precio_eur = precio_usd * cad_eur
+        else:
+            precio_eur = precio_usd / eur_usd if eur_usd > 0 else 0
         valor = info['cantidad'] * precio_eur
-        valor_posiciones_abiertas += valor
-        coste_posiciones_abiertas += info['coste_eur']
-        pnl = valor - info['coste_eur']
-        pnl_pct = (pnl / info['coste_eur'] * 100) if info['coste_eur'] > 0 else 0
-        datos_abiertos.append({
-            'Ticker': ticker, 'Broker': info['broker'], 'Tipo': info['tipo'],
-            'Cantidad': info['cantidad'], 'Coste (€)': info['coste_eur'],
-            'Precio (€)': precio_eur, 'Valor (€)': valor,
-            'P&L (€)': pnl, 'P&L (%)': pnl_pct
+        broker_data.append({
+            'broker': info['broker'],
+            'coste': info['coste_eur'],
+            'valor': valor
         })
 
-    pnl_no_realizado = valor_posiciones_abiertas - coste_posiciones_abiertas
+    df_broker = pd.DataFrame(broker_data).groupby('broker').sum().reset_index()
+    df_broker['pnl'] = df_broker['valor'] - df_broker['coste']
+    df_broker['pnl_pct'] = (df_broker['pnl'] / df_broker['coste'] * 100)
 
-    # Sidebar de filtros
-    st.sidebar.header("Filtros")
+    cols = st.columns(len(df_broker))
+    for i, row in df_broker.iterrows():
+        with cols[i]:
+            st.markdown(f"**{row['broker']}**")
+            st.metric(
+                "Valor",
+                f"€{row['valor']:,.0f}",
+                f"{row['pnl_pct']:+.1f}%"
+            )
 
-    # Filtro broker
-    brokers = ['Todos'] + sorted(df['broker'].unique().tolist())
-    broker_sel = st.sidebar.selectbox("Broker", brokers)
+    st.markdown("---")
 
-    # Filtro tipo activo
-    tipos = ['Todos'] + sorted(df['tipo_activo'].unique().tolist())
-    tipo_sel = st.sidebar.selectbox("Tipo de Activo", tipos)
+    # Distribución visual
+    col1, col2 = st.columns(2)
 
-    # Filtro operacion
-    operaciones = ['Todas'] + sorted(df['tipo_operacion'].unique().tolist())
-    op_sel = st.sidebar.selectbox("Tipo Operacion", operaciones)
+    with col1:
+        st.markdown("### Distribución por Tipo")
+        tipo_data = []
+        for ticker, info in POSICIONES.items():
+            precio_usd = precios.get(info['symbol'], 0)
+            if info['symbol'] == 'CSU.TO':
+                cad_eur = precios.get('CADEUR=X', 0.68)
+                precio_eur = precio_usd * cad_eur
+            else:
+                precio_eur = precio_usd / eur_usd if eur_usd > 0 else 0
+            tipo_data.append({
+                'tipo': info['tipo'],
+                'valor': info['cantidad'] * precio_eur
+            })
+        df_tipo = pd.DataFrame(tipo_data).groupby('tipo')['valor'].sum().reset_index()
 
-    # Filtro año
-    años = ['Todos'] + sorted(df['año'].unique().tolist(), reverse=True)
-    año_sel = st.sidebar.selectbox("Año", años)
+        fig = px.pie(df_tipo, values='valor', names='tipo',
+                     color_discrete_sequence=px.colors.qualitative.Set2)
+        fig.update_traces(textposition='inside', textinfo='percent+label',
+                         hovertemplate='<b>%{label}</b><br>€%{value:,.0f}<extra></extra>')
+        fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0))
+        st.plotly_chart(fig, use_container_width=True)
 
-    # Buscador ticker
-    ticker_buscar = st.sidebar.text_input("Buscar Ticker", "").upper()
+    with col2:
+        st.markdown("### Distribución por Broker")
+        fig = px.pie(df_broker, values='valor', names='broker',
+                     color_discrete_sequence=px.colors.qualitative.Pastel)
+        fig.update_traces(textposition='inside', textinfo='percent+label',
+                         hovertemplate='<b>%{label}</b><br>€%{value:,.0f}<extra></extra>')
+        fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0))
+        st.plotly_chart(fig, use_container_width=True)
+
+# ============== TAB 2: YTD ==============
+def tab_ytd():
+    """Performance del año actual vs benchmark"""
+
+    año_actual = datetime.now().year
+    st.markdown(f"### Performance {año_actual}")
+
+    # Obtener datos del benchmark
+    spy_data = obtener_ytd_benchmark()
+
+    if spy_data.empty:
+        st.warning("No se pudieron obtener datos del benchmark")
+        return
+
+    # Calcular mi rentabilidad YTD (simplificado)
+    df = cargar_datos()
+    precios = obtener_precios()
+    eur_usd = precios.get('EURUSD=X', 1.08)
+    m = calcular_metricas_globales(df, precios, eur_usd)
+
+    # Depósitos YTD
+    depositos_ytd = sum(d['cantidad'] for d in DEPOSITOS
+                        if d['fecha'].startswith(str(año_actual)) and d['moneda'] == 'EUR')
+    depositos_ytd += sum(d['cantidad'] / 18.0 for d in DEPOSITOS  # MXN a EUR aprox
+                         if d['fecha'].startswith(str(año_actual)) and d['moneda'] == 'MXN')
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### Mi Portfolio YTD")
+
+        # Métricas YTD
+        mi_return_ytd = (m['unrealized_pnl'] / m['coste_abiertas'] * 100) if m['coste_abiertas'] > 0 else 0
+
+        st.metric("Invertido este año", f"€{depositos_ytd:,.0f}")
+        st.metric("Rentabilidad YTD (pos. abiertas)", f"{mi_return_ytd:+.1f}%")
+
+    with col2:
+        st.markdown("#### S&P 500 YTD")
+
+        spy_return = spy_data['return_pct'].iloc[-1] if not spy_data.empty else 0
+        st.metric("Rentabilidad S&P 500", f"{spy_return:+.1f}%")
+
+        diff = mi_return_ytd - spy_return
+        if diff > 0:
+            st.success(f"Superando al mercado por {diff:+.1f}%")
+        else:
+            st.error(f"Por debajo del mercado por {diff:.1f}%")
+
+    st.markdown("---")
+
+    # Gráfico comparativo
+    st.markdown("### Evolución S&P 500 YTD")
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=spy_data.index,
+        y=spy_data['return_pct'],
+        mode='lines',
+        name='S&P 500',
+        line=dict(color='#636EFA', width=2),
+        hovertemplate='%{x}<br>Return: %{y:.1f}%<extra></extra>'
+    ))
+    fig.add_hline(y=0, line_dash="dash", line_color="gray")
+    fig.update_layout(
+        xaxis_title="",
+        yaxis_title="Rentabilidad (%)",
+        hovermode='x unified',
+        height=400
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+# ============== TAB 3: LIBRO MAYOR ==============
+def tab_libro_mayor():
+    """Tabla de todas las operaciones con filtros"""
+
+    df = cargar_datos()
+    precios = obtener_precios()
+    eur_usd = precios.get('EURUSD=X', 1.08)
+
+    # Filtros en columnas
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        brokers = ['Todos'] + sorted(df['broker'].unique().tolist())
+        broker_sel = st.selectbox("Broker", brokers)
+
+    with col2:
+        tipos = ['Todos'] + sorted(df['tipo_activo'].unique().tolist())
+        tipo_sel = st.selectbox("Tipo", tipos)
+
+    with col3:
+        estados = ['Todos', 'BUY', 'SELL', 'DIVIDEND']
+        estado_sel = st.selectbox("Operación", estados)
+
+    with col4:
+        ticker_buscar = st.text_input("🔍 Buscar ticker", "").upper()
 
     # Aplicar filtros
     df_filtrado = df.copy()
@@ -353,322 +394,233 @@ def tab_historial():
         df_filtrado = df_filtrado[df_filtrado['broker'] == broker_sel]
     if tipo_sel != 'Todos':
         df_filtrado = df_filtrado[df_filtrado['tipo_activo'] == tipo_sel]
-    if op_sel != 'Todas':
-        df_filtrado = df_filtrado[df_filtrado['tipo_operacion'] == op_sel]
-    if año_sel != 'Todos':
-        df_filtrado = df_filtrado[df_filtrado['año'] == año_sel]
+    if estado_sel != 'Todos':
+        df_filtrado = df_filtrado[df_filtrado['tipo_operacion'] == estado_sel]
     if ticker_buscar:
         df_filtrado = df_filtrado[df_filtrado['ticker'].str.contains(ticker_buscar, na=False)]
 
-    # Metricas resumen del historial
-    total_ops = len(df_filtrado)
-    compras = df_filtrado[df_filtrado['tipo_operacion'] == 'BUY']['importe_neto_eur'].sum()
-    ventas = df_filtrado[df_filtrado['tipo_operacion'] == 'SELL']['importe_neto_eur'].sum()
-    dividendos = df_filtrado[df_filtrado['tipo_operacion'] == 'DIVIDEND']['importe_neto_eur'].sum()
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Operaciones", f"{total_ops}")
-    col2.metric("Compras", f"€{abs(compras):,.2f}")
-    col3.metric("Ventas Realizadas", f"€{ventas:,.2f}")
-    col4.metric("Dividendos", f"€{dividendos:,.2f}")
-
     st.markdown("---")
 
-    # Resumen global: Invertido vs Recuperado (incluyendo posiciones abiertas)
-    st.subheader("Resumen Global de Inversiones")
+    # Preparar tabla
+    df_tabla = df_filtrado[['fecha', 'broker', 'tipo_operacion', 'tipo_activo', 'ticker',
+                            'cantidad', 'importe_neto_eur']].copy()
+    df_tabla['fecha'] = df_tabla['fecha'].dt.strftime('%Y-%m-%d')
+    df_tabla = df_tabla.sort_values('fecha', ascending=False)
+    df_tabla.columns = ['Fecha', 'Broker', 'Operación', 'Tipo', 'Ticker', 'Cantidad', 'Importe €']
 
-    total_invertido = abs(compras)
-    total_recuperado_ventas = ventas + dividendos
-    pnl_realizado = total_recuperado_ventas - (total_invertido - coste_posiciones_abiertas)
-    total_ventas_mas_abiertas = total_recuperado_ventas + valor_posiciones_abiertas
-    pnl_total = pnl_realizado + pnl_no_realizado
+    # Formatear
+    df_display = df_tabla.copy()
+    df_display['Cantidad'] = df_display['Cantidad'].apply(lambda x: f"{x:,.4f}" if abs(x) < 1 else f"{x:,.2f}")
+    df_display['Importe €'] = df_display['Importe €'].apply(lambda x: f"€{x:+,.2f}")
 
-    pnl_realizado_pct = (pnl_realizado / (total_invertido - coste_posiciones_abiertas) * 100) if (total_invertido - coste_posiciones_abiertas) > 0 else 0
-    pnl_no_realizado_pct = (pnl_no_realizado / coste_posiciones_abiertas * 100) if coste_posiciones_abiertas > 0 else 0
-    pnl_total_pct = (pnl_total / total_invertido * 100) if total_invertido > 0 else 0
-
-    # Orden: Total Invertido | Ventas+Abiertas | P&L Realizado
-    #        P&L No Realizado | P&L Total | Valor Posiciones
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Invertido", f"€{total_invertido:,.2f}")
-    col2.metric("Ventas + Pos. Abiertas", f"€{total_ventas_mas_abiertas:,.2f}")
-    col3.metric("P&L Realizado", f"€{pnl_realizado:+,.2f}", f"{pnl_realizado_pct:+.2f}%")
-
-    col4, col5, col6 = st.columns(3)
-    col4.metric("P&L No Realizado", f"€{pnl_no_realizado:+,.2f}", f"{pnl_no_realizado_pct:+.2f}%")
-    col5.metric("P&L Total", f"€{pnl_total:+,.2f}", f"{pnl_total_pct:+.2f}%")
-    col6.metric("Valor Posiciones Abiertas", f"€{valor_posiciones_abiertas:,.2f}")
-
-    st.markdown("---")
-
-    # Tabla de operaciones
-    st.subheader("Historial de Operaciones")
-    cols_mostrar = ['fecha', 'broker', 'tipo_operacion', 'tipo_activo', 'ticker',
-                    'cantidad', 'precio_unitario', 'moneda_original', 'importe_eur',
-                    'comisiones_eur', 'importe_neto_eur', 'notas']
-
-    df_mostrar = df_filtrado[cols_mostrar].copy()
-    df_mostrar['fecha'] = df_mostrar['fecha'].dt.strftime('%Y-%m-%d')
-    df_mostrar = df_mostrar.sort_values('fecha', ascending=False)
-
-    # Renombrar columnas para mejor lectura
-    df_mostrar.columns = ['Fecha', 'Broker', 'Operacion', 'Tipo', 'Ticker',
-                          'Cantidad', 'Precio', 'Moneda', 'Importe €',
-                          'Comision €', 'Neto €', 'Notas']
-
-    st.dataframe(df_mostrar, use_container_width=True, hide_index=True, height=400)
-
-    # Boton descargar
-    csv = df_filtrado.to_csv(index=False)
-    st.download_button("Descargar CSV filtrado", csv, "operaciones_filtradas.csv", "text/csv")
-
-    # Posiciones Abiertas con valor actual
-    st.markdown("---")
-    st.subheader("Posiciones Abiertas (Valor Actual)")
-
-    df_abiertos = pd.DataFrame(datos_abiertos)
-    df_abiertos_display = df_abiertos.copy()
-    df_abiertos_display['Cantidad'] = df_abiertos_display['Cantidad'].apply(lambda x: f"{x:,.6f}" if x < 1 else f"{x:,.2f}")
-    for col in ['Coste (€)', 'Precio (€)', 'Valor (€)']:
-        df_abiertos_display[col] = df_abiertos_display[col].apply(lambda x: f"€{x:,.2f}")
-    df_abiertos_display['P&L (€)'] = df_abiertos_display['P&L (€)'].apply(lambda x: f"€{x:+,.2f}")
-    df_abiertos_display['P&L (%)'] = df_abiertos_display['P&L (%)'].apply(lambda x: f"{x:+.2f}%")
-
-    st.dataframe(df_abiertos_display, use_container_width=True, hide_index=True)
-
-    # Totales posiciones abiertas
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Coste Total", f"€{coste_posiciones_abiertas:,.2f}")
-    col2.metric("Valor Actual", f"€{valor_posiciones_abiertas:,.2f}")
-    col3.metric("P&L No Realizado", f"€{pnl_no_realizado:+,.2f}", f"{pnl_no_realizado_pct:+.2f}%")
-
-    # Grafico operaciones por mes
-    st.markdown("---")
-    st.subheader("Operaciones por Mes")
-
-    df_mes = df_filtrado.groupby(['mes', 'tipo_operacion']).size().reset_index(name='count')
-    fig = px.bar(df_mes, x='mes', y='count', color='tipo_operacion',
-                 barmode='group', color_discrete_map={'BUY': 'blue', 'SELL': 'green', 'DIVIDEND': 'orange'})
-    fig.update_layout(xaxis_title="Mes", yaxis_title="Numero de operaciones")
-    fig.update_traces(hovertemplate='<b>%{x}</b><br>Operaciones: %{y}<extra></extra>')
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def tab_analisis():
-    """Pestaña 3: Análisis de operaciones cerradas"""
-    st.header("Analisis de Rentabilidad")
-
-    df = cargar_datos()
-
-    # Calcular P&L por operacion cerrada
-    # Agrupar compras y ventas por ticker
-    compras = df[df['tipo_operacion'] == 'BUY'].groupby('ticker').agg({
-        'cantidad': 'sum',
-        'importe_neto_eur': 'sum'
-    }).rename(columns={'cantidad': 'cant_comprada', 'importe_neto_eur': 'coste_total'})
-    compras['coste_total'] = compras['coste_total'].abs()
-
-    ventas = df[df['tipo_operacion'] == 'SELL'].groupby('ticker').agg({
-        'cantidad': 'sum',
-        'importe_neto_eur': 'sum'
-    }).rename(columns={'cantidad': 'cant_vendida', 'importe_neto_eur': 'ingreso_total'})
-
-    # Unir
-    analisis = compras.join(ventas, how='outer').fillna(0)
-
-    # Filtrar solo posiciones cerradas (donde se vendio algo)
-    cerradas = analisis[analisis['cant_vendida'] > 0].copy()
-
-    # Calcular coste proporcional de lo vendido
-    cerradas['coste_vendido'] = cerradas.apply(
-        lambda r: r['coste_total'] * min(r['cant_vendida'] / r['cant_comprada'], 1) if r['cant_comprada'] > 0 else 0,
-        axis=1
+    # Mostrar tabla con ordenamiento
+    st.dataframe(
+        df_display,
+        use_container_width=True,
+        hide_index=True,
+        height=500
     )
-    cerradas['pnl'] = cerradas['ingreso_total'] - cerradas['coste_vendido']
-    cerradas['pnl_pct'] = (cerradas['pnl'] / cerradas['coste_vendido'] * 100).replace([float('inf'), -float('inf')], 0)
 
-    cerradas = cerradas.reset_index()
-
-    # Metricas globales
-    total_invertido = cerradas['coste_vendido'].sum()
-    total_recuperado = cerradas['ingreso_total'].sum()
-    pnl_total = cerradas['pnl'].sum()
-    pnl_pct_total = (pnl_total / total_invertido * 100) if total_invertido > 0 else 0
-
+    # Resumen
+    st.markdown("---")
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Invertido (cerradas)", f"€{total_invertido:,.2f}")
-    col2.metric("Total Recuperado", f"€{total_recuperado:,.2f}")
-    col3.metric("P&L Total", f"€{pnl_total:,.2f}", f"{pnl_pct_total:+.2f}%")
-    col4.metric("Operaciones Cerradas", len(cerradas))
+    col1.metric("Operaciones", len(df_filtrado))
+    col2.metric("Compras", f"€{abs(df_filtrado[df_filtrado['tipo_operacion']=='BUY']['importe_neto_eur'].sum()):,.0f}")
+    col3.metric("Ventas", f"€{df_filtrado[df_filtrado['tipo_operacion']=='SELL']['importe_neto_eur'].sum():,.0f}")
+    col4.metric("Dividendos", f"€{df_filtrado[df_filtrado['tipo_operacion']=='DIVIDEND']['importe_neto_eur'].sum():,.0f}")
+
+    # Descargar
+    csv = df_filtrado.to_csv(index=False)
+    st.download_button("📥 Descargar CSV", csv, "operaciones.csv", "text/csv")
+
+# ============== TAB 4: POSICIONES ABIERTAS ==============
+def tab_posiciones():
+    """Posiciones abiertas con precios en tiempo real"""
+
+    with st.spinner('Obteniendo precios...'):
+        precios = obtener_precios()
+
+    eur_usd = precios.get('EURUSD=X', 1.08)
+    cad_eur = precios.get('CADEUR=X', 0.68)
+
+    # Calcular valores
+    datos = []
+    for ticker, info in POSICIONES.items():
+        precio_usd = precios.get(info['symbol'], 0)
+        if info['symbol'] == 'CSU.TO':
+            precio_eur = precio_usd * cad_eur
+        else:
+            precio_eur = precio_usd / eur_usd if eur_usd > 0 else 0
+
+        valor = info['cantidad'] * precio_eur
+        pnl = valor - info['coste_eur']
+        pnl_pct = (pnl / info['coste_eur'] * 100) if info['coste_eur'] > 0 else 0
+
+        datos.append({
+            'Ticker': ticker,
+            'Broker': info['broker'],
+            'Tipo': info['tipo'],
+            'Cantidad': info['cantidad'],
+            'Coste €': info['coste_eur'],
+            'Precio €': precio_eur,
+            'Valor €': valor,
+            'P&L €': pnl,
+            'P&L %': pnl_pct
+        })
+
+    df = pd.DataFrame(datos)
+
+    # Métricas
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Coste Total", f"€{df['Coste €'].sum():,.0f}")
+    col2.metric("Valor Actual", f"€{df['Valor €'].sum():,.0f}")
+    col3.metric("P&L Total", f"€{df['P&L €'].sum():+,.0f}")
+    col4.metric("Rentabilidad", f"{(df['P&L €'].sum()/df['Coste €'].sum()*100):+.1f}%")
 
     st.markdown("---")
 
-    # Top 10 mejores y peores
-    col_best, col_worst = st.columns(2)
-
-    with col_best:
-        st.subheader("Top 10 Mejores Operaciones")
-        top_best = cerradas.nlargest(10, 'pnl_pct')[['ticker', 'coste_vendido', 'ingreso_total', 'pnl', 'pnl_pct']]
-        top_best.columns = ['Ticker', 'Coste €', 'Ingreso €', 'P&L €', 'P&L %']
-        top_best['Coste €'] = top_best['Coste €'].apply(lambda x: f"€{x:,.2f}")
-        top_best['Ingreso €'] = top_best['Ingreso €'].apply(lambda x: f"€{x:,.2f}")
-        top_best['P&L €'] = top_best['P&L €'].apply(lambda x: f"€{x:+,.2f}")
-        top_best['P&L %'] = top_best['P&L %'].apply(lambda x: f"{x:+.1f}%")
-        st.dataframe(top_best, use_container_width=True, hide_index=True)
-
-    with col_worst:
-        st.subheader("Top 10 Peores Operaciones")
-        top_worst = cerradas.nsmallest(10, 'pnl_pct')[['ticker', 'coste_vendido', 'ingreso_total', 'pnl', 'pnl_pct']]
-        top_worst.columns = ['Ticker', 'Coste €', 'Ingreso €', 'P&L €', 'P&L %']
-        top_worst['Coste €'] = top_worst['Coste €'].apply(lambda x: f"€{x:,.2f}")
-        top_worst['Ingreso €'] = top_worst['Ingreso €'].apply(lambda x: f"€{x:,.2f}")
-        top_worst['P&L €'] = top_worst['P&L €'].apply(lambda x: f"€{x:+,.2f}")
-        top_worst['P&L %'] = top_worst['P&L %'].apply(lambda x: f"{x:+.1f}%")
-        st.dataframe(top_worst, use_container_width=True, hide_index=True)
-
-    # Grafico de barras
-    st.markdown("---")
-    st.subheader("P&L por Ticker (Operaciones Cerradas)")
-
-    cerradas_sorted = cerradas.sort_values('pnl', ascending=True)
-    colors = ['green' if x >= 0 else 'red' for x in cerradas_sorted['pnl']]
+    # Gráfico de barras P&L
+    st.markdown("### Rentabilidad por Posición")
+    df_sorted = df.sort_values('P&L %', ascending=True)
+    colors = ['#2ecc71' if x >= 0 else '#e74c3c' for x in df_sorted['P&L %']]
 
     fig = go.Figure(go.Bar(
-        x=cerradas_sorted['pnl'],
-        y=cerradas_sorted['ticker'],
+        x=df_sorted['P&L %'],
+        y=df_sorted['Ticker'],
         orientation='h',
         marker_color=colors,
-        text=[f"€{x:+,.0f}" for x in cerradas_sorted['pnl']],
+        text=[f"{x:+.1f}%" for x in df_sorted['P&L %']],
         textposition='outside',
-        hovertemplate='<b>%{y}</b><br>P&L: €%{x:,.2f}<extra></extra>'
+        hovertemplate='<b>%{y}</b><br>P&L: %{x:+.1f}%<extra></extra>'
     ))
-    fig.update_layout(height=max(400, len(cerradas) * 25), xaxis_title="P&L (€)", yaxis_title="")
+    fig.update_layout(height=400, xaxis_title="P&L (%)", yaxis_title="")
     st.plotly_chart(fig, use_container_width=True)
 
-    # Rentabilidad por año
-    st.markdown("---")
-    st.subheader("Ingresos por Ventas por Año")
+    # Tabla
+    st.markdown("### Detalle")
+    df_display = df.copy()
+    df_display['Cantidad'] = df_display['Cantidad'].apply(lambda x: f"{x:,.6f}" if x < 1 else f"{x:,.2f}")
+    for col in ['Coste €', 'Precio €', 'Valor €']:
+        df_display[col] = df_display[col].apply(lambda x: f"€{x:,.2f}")
+    df_display['P&L €'] = df_display['P&L €'].apply(lambda x: f"€{x:+,.2f}")
+    df_display['P&L %'] = df_display['P&L %'].apply(lambda x: f"{x:+.1f}%")
 
-    # Calcular ventas por año
-    ventas_año = df[df['tipo_operacion'] == 'SELL'].groupby('año')['importe_neto_eur'].sum()
+    st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-    fig = go.Figure(go.Bar(
-        x=ventas_año.index,
-        y=ventas_año.values,
-        marker_color='#2ecc71',
-        text=[f"€{x:,.0f}" for x in ventas_año.values],
-        textposition='outside',
-        hovertemplate='<b>%{x}</b><br>Ingresos: €%{y:,.2f}<extra></extra>'
-    ))
-    fig.update_layout(xaxis_title="Año", yaxis_title="Ingresos por Ventas (€)")
-    st.plotly_chart(fig, use_container_width=True)
+    st.caption(f"EUR/USD: {eur_usd:.4f} | CAD/EUR: {cad_eur:.4f} | Última actualización: {datetime.now().strftime('%H:%M:%S')}")
 
-    # Evolucion de inversiones
-    st.markdown("---")
-    st.subheader("Evolucion de Inversiones")
+# ============== TAB 5: DEPOSITOS ==============
+def tab_depositos():
+    """Timeline vertical de depósitos"""
 
-    df_sorted = df.sort_values('fecha')
-    df_sorted['flujo_acumulado'] = df_sorted['importe_neto_eur'].cumsum()
+    df_dep = pd.DataFrame(DEPOSITOS)
+    df_dep['fecha'] = pd.to_datetime(df_dep['fecha'])
+    df_dep = df_dep.sort_values('fecha', ascending=False)
 
-    fig = px.line(df_sorted, x='fecha', y='flujo_acumulado',
-                  labels={'fecha': 'Fecha', 'flujo_acumulado': 'Flujo Neto Acumulado (€)'})
-    fig.add_hline(y=0, line_dash="dash", line_color="gray")
-    fig.update_traces(hovertemplate='<b>%{x}</b><br>Flujo: €%{y:,.2f}<extra></extra>')
-    st.plotly_chart(fig, use_container_width=True)
+    # Convertir MXN a EUR aproximado para totales
+    df_dep['cantidad_eur'] = df_dep.apply(
+        lambda r: r['cantidad'] if r['moneda'] == 'EUR' else r['cantidad'] / 18.0,  # MXN aprox
+        axis=1
+    )
 
+    # Métricas
+    total_eur = df_dep[df_dep['moneda'] == 'EUR']['cantidad'].sum()
+    total_mxn = df_dep[df_dep['moneda'] == 'MXN']['cantidad'].sum()
+    total_equiv = df_dep['cantidad_eur'].sum()
 
-def tab_dividendos():
-    """Pestaña 4: Dividendos"""
-    st.header("Dividendos Recibidos")
-
-    df = cargar_datos()
-    dividendos = df[df['tipo_operacion'] == 'DIVIDEND'].copy()
-
-    if dividendos.empty:
-        st.info("No hay dividendos registrados")
-        return
-
-    # Total
-    total_div = dividendos['importe_neto_eur'].sum()
-    num_div = len(dividendos)
-
-    col1, col2 = st.columns(2)
-    col1.metric("Total Dividendos", f"€{total_div:,.2f}")
-    col2.metric("Numero de pagos", num_div)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total EUR", f"€{total_eur:,.0f}")
+    col2.metric("Total MXN", f"${total_mxn:,.0f}")
+    col3.metric("Total (equiv. EUR)", f"€{total_equiv:,.0f}")
 
     st.markdown("---")
+    st.markdown("### Timeline de Depósitos")
 
-    # Por ticker
-    st.subheader("Dividendos por Ticker")
-    div_ticker = dividendos.groupby('ticker')['importe_neto_eur'].sum().sort_values(ascending=False)
+    # Timeline vertical usando markdown y contenedores
+    for i, row in df_dep.iterrows():
+        año = row['fecha'].year
 
-    fig = go.Figure(go.Bar(
-        x=div_ticker.index,
-        y=div_ticker.values,
-        marker_color='#f39c12',
-        text=[f"€{x:,.2f}" for x in div_ticker.values],
-        textposition='outside',
-        hovertemplate='<b>%{x}</b><br>Dividendos: €%{y:,.2f}<extra></extra>'
-    ))
-    fig.update_layout(xaxis_title="Ticker", yaxis_title="Total Dividendos (€)")
-    st.plotly_chart(fig, use_container_width=True)
+        # Color por broker
+        color_map = {'Kraken': '🔵', 'Fintual': '🔴', 'IBKR': '🟢'}
+        emoji = color_map.get(row['broker'], '⚪')
 
-    # Por año
-    st.subheader("Dividendos por Año")
-    div_año = dividendos.groupby('año')['importe_neto_eur'].sum()
+        # Formatear cantidad
+        if row['moneda'] == 'EUR':
+            cantidad_str = f"€{row['cantidad']:,.0f}"
+        else:
+            cantidad_str = f"${row['cantidad']:,.0f} MXN"
 
-    fig = go.Figure(go.Bar(
-        x=div_año.index,
-        y=div_año.values,
-        marker_color='#e67e22',
-        text=[f"€{x:,.2f}" for x in div_año.values],
-        textposition='outside',
-        hovertemplate='<b>%{x}</b><br>Dividendos: €%{y:,.2f}<extra></extra>'
-    ))
-    fig.update_layout(xaxis_title="Año", yaxis_title="Total Dividendos (€)")
-    st.plotly_chart(fig, use_container_width=True)
+        fecha_str = row['fecha'].strftime('%d %b %Y')
 
-    # Tabla detalle
+        st.markdown(f"""
+        <div style="display: flex; align-items: center; padding: 10px 0; border-left: 3px solid #ddd; margin-left: 20px; padding-left: 20px;">
+            <div style="position: absolute; left: 10px; font-size: 20px;">{emoji}</div>
+            <div>
+                <strong>{fecha_str}</strong> — {row['broker']}<br>
+                <span style="font-size: 1.2em; color: #2ecc71;">{cantidad_str}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
     st.markdown("---")
-    st.subheader("Detalle de Dividendos")
 
-    div_mostrar = dividendos[['fecha', 'broker', 'ticker', 'importe_neto_eur']].copy()
-    div_mostrar['fecha'] = div_mostrar['fecha'].dt.strftime('%Y-%m-%d')
-    div_mostrar.columns = ['Fecha', 'Broker', 'Ticker', 'Importe €']
-    div_mostrar = div_mostrar.sort_values('Fecha', ascending=False)
-    div_mostrar['Importe €'] = div_mostrar['Importe €'].apply(lambda x: f"€{x:,.2f}")
+    # Gráfico acumulado
+    st.markdown("### Depósitos Acumulados")
+    df_dep_sorted = df_dep.sort_values('fecha')
+    df_dep_sorted['acumulado'] = df_dep_sorted['cantidad_eur'].cumsum()
 
-    st.dataframe(div_mostrar, use_container_width=True, hide_index=True)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df_dep_sorted['fecha'],
+        y=df_dep_sorted['acumulado'],
+        mode='lines+markers',
+        line=dict(color='#2ecc71', width=3),
+        marker=dict(size=10),
+        hovertemplate='%{x}<br>Acumulado: €%{y:,.0f}<extra></extra>'
+    ))
+    fig.update_layout(
+        xaxis_title="",
+        yaxis_title="Total Depositado (€)",
+        height=300
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
+    # Tabla resumen por broker
+    st.markdown("### Por Broker")
+    resumen = df_dep.groupby('broker')['cantidad_eur'].sum().reset_index()
+    resumen.columns = ['Broker', 'Total €']
+    resumen['Total €'] = resumen['Total €'].apply(lambda x: f"€{x:,.0f}")
+    st.dataframe(resumen, use_container_width=True, hide_index=True)
 
 # ============== MAIN ==============
-
 def main():
-    # Verificar contraseña primero
     if not check_password():
         return
 
-    st.title("📊 Mi Portfolio de Inversiones")
+    st.title("📊 Portfolio Dashboard")
 
-    # Pestañas
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📈 Posiciones Abiertas",
-        "📋 Historial",
-        "📊 Analisis",
-        "💰 Dividendos"
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📊 Resumen",
+        "📈 YTD",
+        "📖 Libro Mayor",
+        "💼 Posiciones",
+        "💰 Depósitos"
     ])
 
     with tab1:
-        tab_posiciones_abiertas()
+        tab_resumen()
 
     with tab2:
-        tab_historial()
+        tab_ytd()
 
     with tab3:
-        tab_analisis()
+        tab_libro_mayor()
 
     with tab4:
-        tab_dividendos()
+        tab_posiciones()
+
+    with tab5:
+        tab_depositos()
 
 if __name__ == "__main__":
     main()
