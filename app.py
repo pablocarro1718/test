@@ -768,6 +768,44 @@ def main():
 
     st.title("📊 Portfolio Dashboard")
 
+    # Toggle para modo privado (blur cifras)
+    col_title, col_toggle = st.columns([4, 1])
+    with col_toggle:
+        modo_privado = st.toggle("🔒 Modo Privado", value=False, help="Difumina las cifras para screenshots")
+
+    # Inyectar CSS para blur si está activado
+    if modo_privado:
+        st.markdown("""
+        <style>
+        /* Blur en métricas de Streamlit */
+        [data-testid="stMetricValue"] {
+            filter: blur(8px) !important;
+            -webkit-filter: blur(8px) !important;
+        }
+        [data-testid="stMetricDelta"] {
+            filter: blur(6px) !important;
+            -webkit-filter: blur(6px) !important;
+        }
+        /* Blur en tablas */
+        .stDataFrame td {
+            filter: blur(6px) !important;
+            -webkit-filter: blur(6px) !important;
+        }
+        /* Blur en gráficos Plotly */
+        .js-plotly-plot .plotly .gtitle,
+        .js-plotly-plot .plotly .xtick text,
+        .js-plotly-plot .plotly .ytick text,
+        .js-plotly-plot .plotly .slice .slicetext {
+            filter: blur(5px) !important;
+        }
+        /* Blur en texto personalizado con cifras */
+        .blur-cifras {
+            filter: blur(8px) !important;
+            -webkit-filter: blur(8px) !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 Resumen",
         "📈 YTD",
