@@ -39,22 +39,22 @@ def check_password():
 # ============== DATOS ==============
 CSV_PATH = os.path.join(os.path.dirname(__file__), 'inversiones_unificadas.csv')
 
-# Posiciones abiertas actuales (coste en moneda original para cálculo correcto de P&L)
+# Posiciones abiertas actuales (coste en moneda original + fecha apertura para YTD)
 POSICIONES = {
-    # Kraken - Crypto (compradas en EUR)
-    'BTC': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.05678, 'coste': 1048.29, 'moneda': 'EUR', 'symbol': 'BTC-USD'},
-    'ETH': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.34793, 'coste': 700.75, 'moneda': 'EUR', 'symbol': 'ETH-USD'},
-    'SOL': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 2.13768, 'coste': 298.95, 'moneda': 'EUR', 'symbol': 'SOL-USD'},
+    # Kraken - Crypto (compradas en EUR, múltiples compras consolidadas)
+    'BTC': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.05678, 'coste': 1048.29, 'moneda': 'EUR', 'symbol': 'BTC-USD', 'fecha_apertura': '2020-05-19'},
+    'ETH': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.34793, 'coste': 700.75, 'moneda': 'EUR', 'symbol': 'ETH-USD', 'fecha_apertura': '2021-05-19'},
+    'SOL': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 2.13768, 'coste': 298.95, 'moneda': 'EUR', 'symbol': 'SOL-USD', 'fecha_apertura': '2021-12-03'},
     # Fintual - Stocks/ETFs (comprados en USD)
-    'NU': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 91.449629, 'coste': 1050.00, 'moneda': 'USD', 'symbol': 'NU'},
-    'AMZN': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 5.998302, 'coste': 1129.93, 'moneda': 'USD', 'symbol': 'AMZN'},
-    'SPY': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 0.461054, 'coste': 250.00, 'moneda': 'USD', 'symbol': 'SPY'},
-    'IEV': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 20.544768, 'coste': 1305.62, 'moneda': 'USD', 'symbol': 'IEV'},
-    'ARGT': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 15.990136, 'coste': 1410.33, 'moneda': 'USD', 'symbol': 'ARGT'},
-    'AAPL': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 4.564051, 'coste': 1241.65, 'moneda': 'USD', 'symbol': 'AAPL'},
+    'NU': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 91.449629, 'coste': 1050.00, 'moneda': 'USD', 'symbol': 'NU', 'fecha_apertura': '2025-12-18'},
+    'AMZN': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 5.998302, 'coste': 1129.93, 'moneda': 'USD', 'symbol': 'AMZN', 'fecha_apertura': '2025-12-18'},
+    'SPY': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 0.461054, 'coste': 250.00, 'moneda': 'USD', 'symbol': 'SPY', 'fecha_apertura': '2025-12-18'},
+    'IEV': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 20.544768, 'coste': 1305.62, 'moneda': 'USD', 'symbol': 'IEV', 'fecha_apertura': '2025-12-18'},
+    'ARGT': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 15.990136, 'coste': 1410.33, 'moneda': 'USD', 'symbol': 'ARGT', 'fecha_apertura': '2025-12-18'},
+    'AAPL': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 4.564051, 'coste': 1241.65, 'moneda': 'USD', 'symbol': 'AAPL', 'fecha_apertura': '2026-01-01'},
     # IBKR
-    'CSU': {'broker': 'IBKR', 'tipo': 'Stock', 'cantidad': 0.3543, 'coste': 967.78, 'moneda': 'CAD', 'symbol': 'CSU.TO'},
-    'URA': {'broker': 'IBKR', 'tipo': 'ETF', 'cantidad': 10.0, 'coste': 552.10, 'moneda': 'USD', 'symbol': 'URA'},
+    'CSU': {'broker': 'IBKR', 'tipo': 'Stock', 'cantidad': 0.3543, 'coste': 967.78, 'moneda': 'CAD', 'symbol': 'CSU.TO', 'fecha_apertura': '2026-01-20'},
+    'URA': {'broker': 'IBKR', 'tipo': 'ETF', 'cantidad': 10.0, 'coste': 552.10, 'moneda': 'USD', 'symbol': 'URA', 'fecha_apertura': '2026-01-20'},
 }
 
 # Historial de depósitos y retiradas (fecha, broker, cantidad, moneda, tipo)
@@ -153,25 +153,38 @@ def calcular_valor_posicion(ticker, info, precios):
     Calcula el valor actual y P&L de una posición en su moneda original.
     Retorna: precio_actual, valor_actual, pnl, pnl_pct (todo en moneda original)
     """
-    precio_usd = precios.get(info['symbol'], 0)
+    symbol = info['symbol']
+    precio_raw = precios.get(symbol, 0)
     eur_usd = precios.get('EUR_USD', 1.08)
     cad_usd = precios.get('CAD_USD', 0.70)
 
-    moneda = info['moneda']
+    moneda_coste = info['moneda']
     coste = info['coste']
     cantidad = info['cantidad']
 
-    # Convertir precio USD a la moneda original de la posición
-    if moneda == 'USD':
-        precio_actual = precio_usd
-    elif moneda == 'EUR':
-        precio_actual = precio_usd / eur_usd if eur_usd > 0 else 0
-    elif moneda == 'CAD':
-        precio_actual = precio_usd / cad_usd if cad_usd > 0 else 0
+    # Determinar moneda del precio según el símbolo
+    # .TO = Toronto Stock Exchange (CAD), resto = USD
+    if symbol.endswith('.TO'):
+        moneda_precio = 'CAD'
     else:
-        precio_actual = precio_usd
+        moneda_precio = 'USD'
 
-    # Calcular valores en moneda original
+    # Convertir precio a la moneda del coste
+    if moneda_coste == moneda_precio:
+        # Misma moneda, no hay conversión
+        precio_actual = precio_raw
+    elif moneda_coste == 'EUR' and moneda_precio == 'USD':
+        precio_actual = precio_raw / eur_usd if eur_usd > 0 else 0
+    elif moneda_coste == 'EUR' and moneda_precio == 'CAD':
+        precio_actual = precio_raw * cad_usd / eur_usd if eur_usd > 0 else 0
+    elif moneda_coste == 'CAD' and moneda_precio == 'USD':
+        precio_actual = precio_raw / cad_usd if cad_usd > 0 else 0
+    elif moneda_coste == 'USD' and moneda_precio == 'CAD':
+        precio_actual = precio_raw * cad_usd
+    else:
+        precio_actual = precio_raw
+
+    # Calcular valores en moneda original del coste
     valor_actual = cantidad * precio_actual
     pnl = valor_actual - coste
     pnl_pct = (pnl / coste * 100) if coste > 0 else 0
@@ -181,7 +194,7 @@ def calcular_valor_posicion(ticker, info, precios):
         'valor': valor_actual,
         'pnl': pnl,
         'pnl_pct': pnl_pct,
-        'moneda': moneda
+        'moneda': moneda_coste
     }
 
 
@@ -290,35 +303,41 @@ def tab_resumen():
         precios = obtener_precios()
         m = calcular_metricas_globales(df, precios)
 
-    # Métricas principales - Fila 1
-    st.markdown("### Métricas Principales")
+    # Calcular P&L total
+    total_pnl = m['realized_pnl'] + m['unrealized_pnl']
+    total_pnl_pct = (total_pnl / m['total_invertido'] * 100) if m['total_invertido'] > 0 else 0
 
+    # ====== GRUPO 1: RESUMEN GLOBAL ======
+    st.markdown("### 📊 Resumen Global")
     col1, col2, col3, col4 = st.columns(4)
 
     col1.metric("Total Invertido", f"€{m['total_invertido']:,.0f}")
-    col2.metric("Desinversiones", f"€{m['desinversiones']:,.0f}")
-    col3.metric("Open Positions", f"€{m['valor_abiertas']:,.0f}")
-    col4.metric(
-        "Desinv. + Open",
-        f"€{m['valor_actual']:,.0f}",
-        f"{((m['valor_actual']/m['total_invertido'])-1)*100:+.1f}%" if m['total_invertido'] > 0 else ""
-    )
-
-    # Métricas principales - Fila 2
-    col5, col6, col7 = st.columns(3)
-
-    col5.metric("Realized P&L", f"€{m['realized_pnl']:+,.0f}")
-    col6.metric(
-        "Unrealized P&L",
-        f"€{m['unrealized_pnl']:+,.0f}",
-        f"{(m['unrealized_pnl']/m['coste_abiertas'])*100:+.1f}%" if m['coste_abiertas'] > 0 else ""
-    )
-    col7.metric("TIR", f"{m['tir']*100:+.1f}%")
+    col2.metric("Valor Total", f"€{m['valor_actual']:,.0f}")
+    col3.metric("P&L Total", f"€{total_pnl:+,.0f}", f"{total_pnl_pct:+.1f}%")
+    col4.metric("TIR", f"{m['tir']*100:+.1f}%")
 
     st.markdown("---")
 
-    # Resumen por broker
-    st.markdown("### Por Broker")
+    # ====== GRUPO 2 y 3 en columnas ======
+    col_ventas, col_open = st.columns(2)
+
+    # ====== GRUPO 2: POSICIONES CERRADAS ======
+    with col_ventas:
+        st.markdown("### 💰 Posiciones Cerradas")
+        st.metric("Ventas + Dividendos", f"€{m['desinversiones']:,.0f}")
+        st.metric("Realized P&L", f"€{m['realized_pnl']:+,.0f}")
+
+    # ====== GRUPO 3: POSICIONES ABIERTAS ======
+    with col_open:
+        st.markdown("### 📈 Posiciones Abiertas")
+        st.metric("Valor Actual", f"€{m['valor_abiertas']:,.0f}")
+        unrealized_pct = (m['unrealized_pnl']/m['coste_abiertas']*100) if m['coste_abiertas'] > 0 else 0
+        st.metric("Unrealized P&L", f"€{m['unrealized_pnl']:+,.0f}", f"{unrealized_pct:+.1f}%")
+
+    st.markdown("---")
+
+    # ====== RESUMEN POR BROKER ======
+    st.markdown("### 🏦 Por Broker")
 
     broker_data = []
     for ticker, info in POSICIONES.items():
@@ -339,9 +358,8 @@ def tab_resumen():
     cols = st.columns(len(df_broker))
     for i, row in df_broker.iterrows():
         with cols[i]:
-            st.markdown(f"**{row['broker']}**")
             st.metric(
-                "Valor",
+                row['broker'],
                 f"€{row['valor']:,.0f}",
                 f"{row['pnl_pct']:+.1f}%"
             )
@@ -384,71 +402,112 @@ def tab_ytd():
     """Performance del año actual vs benchmark"""
 
     año_actual = datetime.now().year
+    inicio_año = f"{año_actual}-01-01"
     st.markdown(f"### Performance {año_actual}")
+
+    precios = obtener_precios()
+
+    # Calcular performance por posición
+    datos_ytd = []
+    total_valor_inicio = 0
+    total_valor_actual = 0
+
+    for ticker, info in POSICIONES.items():
+        pos = calcular_valor_posicion(ticker, info, precios)
+        valor_actual_eur = convertir_a_eur(pos['valor'], pos['moneda'], precios)
+        coste_eur = convertir_a_eur(info['coste'], info['moneda'], precios)
+
+        fecha_apertura = info.get('fecha_apertura', '2020-01-01')
+        abierta_antes_año = fecha_apertura < inicio_año
+
+        if abierta_antes_año:
+            # Posición existía a 01/01 - usamos coste como proxy del valor inicial
+            # (idealmente tendríamos precio histórico, pero usamos coste)
+            valor_inicio = coste_eur
+            rentabilidad = pos['pnl_pct']
+            tipo_rent = "Desde compra"
+        else:
+            # Posición abierta este año - rentabilidad desde compra
+            valor_inicio = coste_eur
+            rentabilidad = pos['pnl_pct']
+            tipo_rent = "Desde compra"
+
+        total_valor_inicio += valor_inicio
+        total_valor_actual += valor_actual_eur
+
+        datos_ytd.append({
+            'Ticker': ticker,
+            'Broker': info['broker'],
+            'Fecha Apertura': fecha_apertura,
+            'Abierta antes 2026': 'Sí' if abierta_antes_año else 'No',
+            'Coste': coste_eur,
+            'Valor Actual': valor_actual_eur,
+            'P&L €': valor_actual_eur - coste_eur,
+            'Rentabilidad %': rentabilidad,
+            'Tipo': tipo_rent
+        })
+
+    df_ytd = pd.DataFrame(datos_ytd)
+
+    # Rentabilidad total ponderada
+    rentabilidad_total = ((total_valor_actual - total_valor_inicio) / total_valor_inicio * 100) if total_valor_inicio > 0 else 0
 
     # Obtener datos del benchmark
     spy_data = obtener_ytd_benchmark()
+    spy_return = spy_data['return_pct'].iloc[-1] if not spy_data.empty else 0
 
-    if spy_data.empty:
-        st.warning("No se pudieron obtener datos del benchmark")
-        return
+    # Métricas principales
+    col1, col2, col3 = st.columns(3)
 
-    # Calcular mi rentabilidad YTD (simplificado)
-    df = cargar_datos()
-    precios = obtener_precios()
-    m = calcular_metricas_globales(df, precios)
+    col1.metric("Mi Portfolio", f"{rentabilidad_total:+.1f}%")
+    col2.metric("S&P 500 YTD", f"{spy_return:+.1f}%")
+    diff = rentabilidad_total - spy_return
+    col3.metric("vs Benchmark", f"{diff:+.1f}%",
+                delta_color="normal" if diff >= 0 else "inverse")
 
-    # Depósitos YTD (solo depósitos, no retiradas)
-    depositos_ytd = sum(d['cantidad'] for d in DEPOSITOS
-                        if d['fecha'].startswith(str(año_actual)) and d['moneda'] == 'EUR' and d['tipo'] == 'deposito')
-    depositos_ytd += sum(d['cantidad'] / 18.0 for d in DEPOSITOS  # MXN a EUR aprox
-                         if d['fecha'].startswith(str(año_actual)) and d['moneda'] == 'MXN' and d['tipo'] == 'deposito')
+    st.markdown("---")
 
-    col1, col2 = st.columns(2)
+    # Tabla detallada
+    st.markdown("### Detalle por Posición")
 
-    with col1:
-        st.markdown("#### Mi Portfolio YTD")
+    # Ordenar por rentabilidad
+    df_display = df_ytd.sort_values('Rentabilidad %', ascending=False).copy()
 
-        # Métricas YTD
-        mi_return_ytd = (m['unrealized_pnl'] / m['coste_abiertas'] * 100) if m['coste_abiertas'] > 0 else 0
+    # Formatear columnas
+    df_display['Coste'] = df_display['Coste'].apply(lambda x: f"€{x:,.0f}")
+    df_display['Valor Actual'] = df_display['Valor Actual'].apply(lambda x: f"€{x:,.0f}")
+    df_display['P&L €'] = df_display['P&L €'].apply(lambda x: f"€{x:+,.0f}")
+    df_display['Rentabilidad %'] = df_display['Rentabilidad %'].apply(lambda x: f"{x:+.1f}%")
 
-        st.metric("Invertido este año", f"€{depositos_ytd:,.0f}")
-        st.metric("Rentabilidad YTD (pos. abiertas)", f"{mi_return_ytd:+.1f}%")
-
-    with col2:
-        st.markdown("#### S&P 500 YTD")
-
-        spy_return = spy_data['return_pct'].iloc[-1] if not spy_data.empty else 0
-        st.metric("Rentabilidad S&P 500", f"{spy_return:+.1f}%")
-
-        diff = mi_return_ytd - spy_return
-        if diff > 0:
-            st.success(f"Superando al mercado por {diff:+.1f}%")
-        else:
-            st.error(f"Por debajo del mercado por {diff:.1f}%")
+    st.dataframe(
+        df_display[['Ticker', 'Broker', 'Fecha Apertura', 'Coste', 'Valor Actual', 'P&L €', 'Rentabilidad %']],
+        use_container_width=True,
+        hide_index=True
+    )
 
     st.markdown("---")
 
     # Gráfico comparativo
-    st.markdown("### Evolución S&P 500 YTD")
+    if not spy_data.empty:
+        st.markdown("### Evolución S&P 500 YTD")
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=spy_data.index,
-        y=spy_data['return_pct'],
-        mode='lines',
-        name='S&P 500',
-        line=dict(color='#636EFA', width=2),
-        hovertemplate='%{x}<br>Return: %{y:.1f}%<extra></extra>'
-    ))
-    fig.add_hline(y=0, line_dash="dash", line_color="gray")
-    fig.update_layout(
-        xaxis_title="",
-        yaxis_title="Rentabilidad (%)",
-        hovermode='x unified',
-        height=400
-    )
-    st.plotly_chart(fig, use_container_width=True)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=spy_data.index,
+            y=spy_data['return_pct'],
+            mode='lines',
+            name='S&P 500',
+            line=dict(color='#636EFA', width=2),
+            hovertemplate='%{x}<br>Return: %{y:.1f}%<extra></extra>'
+        ))
+        fig.add_hline(y=0, line_dash="dash", line_color="gray")
+        fig.update_layout(
+            xaxis_title="",
+            yaxis_title="Rentabilidad (%)",
+            hovermode='x unified',
+            height=350
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
 # ============== TAB 3: LIBRO MAYOR ==============
 def tab_libro_mayor():
@@ -557,12 +616,16 @@ def tab_posiciones():
 
     df = pd.DataFrame(datos)
 
+    # Calcular TIR de posiciones abiertas
+    tir = calcular_xirr(FLUJOS_ABIERTOS, df['Valor €'].sum())
+
     # Métricas
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Coste Total", f"€{df['Coste €'].sum():,.0f}")
     col2.metric("Valor Actual", f"€{df['Valor €'].sum():,.0f}")
     col3.metric("P&L Total", f"€{df['P&L €'].sum():+,.0f}")
     col4.metric("Rentabilidad", f"{(df['P&L €'].sum()/df['Coste €'].sum()*100):+.1f}%")
+    col5.metric("TIR", f"{tir*100:+.1f}%")
 
     st.markdown("---")
 
