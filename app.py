@@ -39,35 +39,67 @@ def check_password():
 # ============== DATOS ==============
 CSV_PATH = os.path.join(os.path.dirname(__file__), 'inversiones_unificadas.csv')
 
-# Posiciones abiertas actuales
+# Posiciones abiertas actuales (coste en moneda original para cálculo correcto de P&L)
 POSICIONES = {
-    'BTC': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.05678, 'coste_eur': 1048.29, 'symbol': 'BTC-USD'},
-    'ETH': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.34793, 'coste_eur': 700.75, 'symbol': 'ETH-USD'},
-    'SOL': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 2.13768, 'coste_eur': 298.95, 'symbol': 'SOL-USD'},
-    'NU': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 91.449629, 'coste_eur': 1009.61, 'symbol': 'NU'},
-    'AMZN': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 5.998302, 'coste_eur': 1086.47, 'symbol': 'AMZN'},
-    'SPY': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 0.461054, 'coste_eur': 240.38, 'symbol': 'SPY'},
-    'IEV': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 20.544768, 'coste_eur': 1255.40, 'symbol': 'IEV'},
-    'ARGT': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 15.990136, 'coste_eur': 1356.09, 'symbol': 'ARGT'},
-    'AAPL': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 4.564051, 'coste_eur': 1061.24, 'symbol': 'AAPL'},
-    'CSU': {'broker': 'IBKR', 'tipo': 'Stock', 'cantidad': 0.3543, 'coste_eur': 596.00, 'symbol': 'CSU.TO'},
-    'URA': {'broker': 'IBKR', 'tipo': 'ETF', 'cantidad': 10.0, 'coste_eur': 530.87, 'symbol': 'URA'},
+    # Kraken - Crypto (compradas en EUR)
+    'BTC': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.05678, 'coste': 1048.29, 'moneda': 'EUR', 'symbol': 'BTC-USD'},
+    'ETH': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.34793, 'coste': 700.75, 'moneda': 'EUR', 'symbol': 'ETH-USD'},
+    'SOL': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 2.13768, 'coste': 298.95, 'moneda': 'EUR', 'symbol': 'SOL-USD'},
+    # Fintual - Stocks/ETFs (comprados en USD)
+    'NU': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 91.449629, 'coste': 1050.00, 'moneda': 'USD', 'symbol': 'NU'},
+    'AMZN': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 5.998302, 'coste': 1129.93, 'moneda': 'USD', 'symbol': 'AMZN'},
+    'SPY': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 0.461054, 'coste': 250.00, 'moneda': 'USD', 'symbol': 'SPY'},
+    'IEV': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 20.544768, 'coste': 1305.62, 'moneda': 'USD', 'symbol': 'IEV'},
+    'ARGT': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 15.990136, 'coste': 1410.33, 'moneda': 'USD', 'symbol': 'ARGT'},
+    'AAPL': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 4.564051, 'coste': 1241.65, 'moneda': 'USD', 'symbol': 'AAPL'},
+    # IBKR
+    'CSU': {'broker': 'IBKR', 'tipo': 'Stock', 'cantidad': 0.3543, 'coste': 967.78, 'moneda': 'CAD', 'symbol': 'CSU.TO'},
+    'URA': {'broker': 'IBKR', 'tipo': 'ETF', 'cantidad': 10.0, 'coste': 552.10, 'moneda': 'USD', 'symbol': 'URA'},
 }
 
-# Historial de depósitos (fecha, broker, cantidad, moneda)
+# Historial de depósitos y retiradas (fecha, broker, cantidad, moneda, tipo)
 DEPOSITOS = [
-    {'fecha': '2020-05-19', 'broker': 'Kraken', 'cantidad': 248.00, 'moneda': 'EUR'},
-    {'fecha': '2021-03-02', 'broker': 'Kraken', 'cantidad': 500.00, 'moneda': 'EUR'},
-    {'fecha': '2021-12-03', 'broker': 'Kraken', 'cantidad': 200.00, 'moneda': 'EUR'},
-    {'fecha': '2022-01-25', 'broker': 'Kraken', 'cantidad': 600.00, 'moneda': 'EUR'},
-    {'fecha': '2022-06-20', 'broker': 'Kraken', 'cantidad': 500.00, 'moneda': 'EUR'},
-    {'fecha': '2025-03-10', 'broker': 'Fintual', 'cantidad': 1138.82, 'moneda': 'EUR'},
-    {'fecha': '2025-04-03', 'broker': 'Fintual', 'cantidad': 927.31, 'moneda': 'EUR'},
-    {'fecha': '2025-05-29', 'broker': 'Fintual', 'cantidad': 1207.52, 'moneda': 'EUR'},
-    {'fecha': '2025-10-24', 'broker': 'Fintual', 'cantidad': 1335.43, 'moneda': 'EUR'},
-    {'fecha': '2025-12-15', 'broker': 'Fintual', 'cantidad': 1372.11, 'moneda': 'EUR'},
-    {'fecha': '2026-01-02', 'broker': 'IBKR', 'cantidad': 30000.00, 'moneda': 'MXN'},
-    {'fecha': '2026-01-23', 'broker': 'IBKR', 'cantidad': 1000.00, 'moneda': 'EUR'},
+    # Degiro - Depósitos
+    {'fecha': '2019-12-28', 'broker': 'Degiro', 'cantidad': 1.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2020-03-03', 'broker': 'Degiro', 'cantidad': 50.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2020-03-17', 'broker': 'Degiro', 'cantidad': 300.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2020-04-07', 'broker': 'Degiro', 'cantidad': 200.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2020-04-14', 'broker': 'Degiro', 'cantidad': 1173.54, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2020-05-13', 'broker': 'Degiro', 'cantidad': 150.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2020-06-02', 'broker': 'Degiro', 'cantidad': 200.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2020-06-30', 'broker': 'Degiro', 'cantidad': 200.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    # Degiro - Retirada
+    {'fecha': '2025-12-20', 'broker': 'Degiro', 'cantidad': -3454.08, 'moneda': 'EUR', 'tipo': 'retirada'},
+    # Trading212 - Depósitos
+    {'fecha': '2022-01-23', 'broker': 'Trading212', 'cantidad': 300.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2022-02-23', 'broker': 'Trading212', 'cantidad': 200.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2022-02-25', 'broker': 'Trading212', 'cantidad': 250.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2022-04-01', 'broker': 'Trading212', 'cantidad': 250.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2022-04-28', 'broker': 'Trading212', 'cantidad': 100.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2022-05-28', 'broker': 'Trading212', 'cantidad': 100.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2022-06-14', 'broker': 'Trading212', 'cantidad': 1000.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2022-06-28', 'broker': 'Trading212', 'cantidad': 100.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2022-07-28', 'broker': 'Trading212', 'cantidad': 100.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2024-01-17', 'broker': 'Trading212', 'cantidad': 600.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    # Trading212 - Retiradas
+    {'fecha': '2024-09-27', 'broker': 'Trading212', 'cantidad': -604.20, 'moneda': 'EUR', 'tipo': 'retirada'},
+    {'fecha': '2024-09-27', 'broker': 'Trading212', 'cantidad': -2402.80, 'moneda': 'EUR', 'tipo': 'retirada'},
+    {'fecha': '2024-10-04', 'broker': 'Trading212', 'cantidad': -925.00, 'moneda': 'EUR', 'tipo': 'retirada'},
+    # Kraken - Depósitos
+    {'fecha': '2020-05-19', 'broker': 'Kraken', 'cantidad': 248.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2021-03-02', 'broker': 'Kraken', 'cantidad': 500.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2021-12-03', 'broker': 'Kraken', 'cantidad': 200.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2022-01-25', 'broker': 'Kraken', 'cantidad': 600.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2022-06-20', 'broker': 'Kraken', 'cantidad': 500.00, 'moneda': 'EUR', 'tipo': 'deposito'},
+    # Fintual - Depósitos
+    {'fecha': '2025-03-10', 'broker': 'Fintual', 'cantidad': 1138.82, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2025-04-03', 'broker': 'Fintual', 'cantidad': 927.31, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2025-05-29', 'broker': 'Fintual', 'cantidad': 1207.52, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2025-10-24', 'broker': 'Fintual', 'cantidad': 1335.43, 'moneda': 'EUR', 'tipo': 'deposito'},
+    {'fecha': '2025-12-15', 'broker': 'Fintual', 'cantidad': 1372.11, 'moneda': 'EUR', 'tipo': 'deposito'},
+    # IBKR - Depósitos
+    {'fecha': '2026-01-02', 'broker': 'IBKR', 'cantidad': 30000.00, 'moneda': 'MXN', 'tipo': 'deposito'},
+    {'fecha': '2026-01-23', 'broker': 'IBKR', 'cantidad': 1000.00, 'moneda': 'EUR', 'tipo': 'deposito'},
 ]
 
 # Flujos para TIR
@@ -90,9 +122,10 @@ def cargar_datos():
 
 @st.cache_data(ttl=300)
 def obtener_precios():
-    """Obtiene precios de Yahoo Finance"""
+    """Obtiene precios de Yahoo Finance y tipos de cambio"""
     symbols = list(set([p['symbol'] for p in POSICIONES.values()]))
-    symbols.extend(['EURUSD=X', 'SPY', 'CADEUR=X'])
+    # Añadir tipos de cambio necesarios
+    symbols.extend(['EURUSD=X', 'CADUSD=X'])
 
     precios = {}
     for symbol in symbols:
@@ -103,7 +136,69 @@ def obtener_precios():
                 precios[symbol] = hist['Close'].iloc[-1]
         except:
             precios[symbol] = 0
+
+    # Calcular tipo de cambio EUR/USD
+    eur_usd = precios.get('EURUSD=X', 1.08)
+    cad_usd = precios.get('CADUSD=X', 0.70)
+
+    precios['EUR_USD'] = eur_usd
+    precios['CAD_USD'] = cad_usd
+    precios['CAD_EUR'] = cad_usd / eur_usd if eur_usd > 0 else 0.65
+
     return precios
+
+
+def calcular_valor_posicion(ticker, info, precios):
+    """
+    Calcula el valor actual y P&L de una posición en su moneda original.
+    Retorna: precio_actual, valor_actual, pnl, pnl_pct (todo en moneda original)
+    """
+    precio_usd = precios.get(info['symbol'], 0)
+    eur_usd = precios.get('EUR_USD', 1.08)
+    cad_usd = precios.get('CAD_USD', 0.70)
+
+    moneda = info['moneda']
+    coste = info['coste']
+    cantidad = info['cantidad']
+
+    # Convertir precio USD a la moneda original de la posición
+    if moneda == 'USD':
+        precio_actual = precio_usd
+    elif moneda == 'EUR':
+        precio_actual = precio_usd / eur_usd if eur_usd > 0 else 0
+    elif moneda == 'CAD':
+        precio_actual = precio_usd / cad_usd if cad_usd > 0 else 0
+    else:
+        precio_actual = precio_usd
+
+    # Calcular valores en moneda original
+    valor_actual = cantidad * precio_actual
+    pnl = valor_actual - coste
+    pnl_pct = (pnl / coste * 100) if coste > 0 else 0
+
+    return {
+        'precio': precio_actual,
+        'valor': valor_actual,
+        'pnl': pnl,
+        'pnl_pct': pnl_pct,
+        'moneda': moneda
+    }
+
+
+def convertir_a_eur(valor, moneda, precios):
+    """Convierte un valor a EUR usando tipos de cambio actuales"""
+    eur_usd = precios.get('EUR_USD', 1.08)
+    cad_eur = precios.get('CAD_EUR', 0.65)
+
+    if moneda == 'EUR':
+        return valor
+    elif moneda == 'USD':
+        return valor / eur_usd if eur_usd > 0 else valor
+    elif moneda == 'CAD':
+        return valor * cad_eur
+    elif moneda == 'MXN':
+        return valor / 18.0  # Aproximado
+    return valor
 
 @st.cache_data(ttl=3600)
 def obtener_ytd_benchmark():
@@ -141,43 +236,48 @@ def calcular_xirr(flujos, valor_final):
     except:
         return 0
 
-def calcular_metricas_globales(df, precios, eur_usd):
+def calcular_metricas_globales(df, precios):
     """Calcula todas las métricas globales del portfolio"""
 
-    # Valor posiciones abiertas
-    valor_abiertas = 0
-    coste_abiertas = 0
-    for ticker, info in POSICIONES.items():
-        precio_usd = precios.get(info['symbol'], 0)
-        if info['symbol'] == 'CSU.TO':
-            cad_eur = precios.get('CADEUR=X', 0.68)
-            precio_eur = precio_usd * cad_eur
-        else:
-            precio_eur = precio_usd / eur_usd if eur_usd > 0 else 0
-        valor_abiertas += info['cantidad'] * precio_eur
-        coste_abiertas += info['coste_eur']
+    # Calcular valor y coste de posiciones abiertas (todo convertido a EUR)
+    valor_abiertas_eur = 0
+    coste_abiertas_eur = 0
+    unrealized_pnl_eur = 0
 
-    # Operaciones cerradas (ventas)
+    for ticker, info in POSICIONES.items():
+        pos = calcular_valor_posicion(ticker, info, precios)
+
+        # Convertir a EUR para consolidación
+        valor_eur = convertir_a_eur(pos['valor'], pos['moneda'], precios)
+        coste_eur = convertir_a_eur(info['coste'], info['moneda'], precios)
+        pnl_eur = convertir_a_eur(pos['pnl'], pos['moneda'], precios)
+
+        valor_abiertas_eur += valor_eur
+        coste_abiertas_eur += coste_eur
+        unrealized_pnl_eur += pnl_eur
+
+    # Operaciones cerradas (ventas) - ya están en EUR en el CSV
     ventas = df[df['tipo_operacion'] == 'SELL']['importe_neto_eur'].sum()
     dividendos = df[df['tipo_operacion'] == 'DIVIDEND']['importe_neto_eur'].sum()
     compras = abs(df[df['tipo_operacion'] == 'BUY']['importe_neto_eur'].sum())
 
     # Métricas
     total_invertido = compras
-    valor_actual = ventas + dividendos + valor_abiertas
-    realized_pnl = ventas + dividendos - (compras - coste_abiertas)
-    unrealized_pnl = valor_abiertas - coste_abiertas
-    tir = calcular_xirr(FLUJOS_ABIERTOS, valor_abiertas)
+    desinversiones = ventas + dividendos
+    valor_actual = desinversiones + valor_abiertas_eur
+    realized_pnl = desinversiones - (compras - coste_abiertas_eur)
+    tir = calcular_xirr(FLUJOS_ABIERTOS, valor_abiertas_eur)
 
     return {
         'total_invertido': total_invertido,
+        'desinversiones': desinversiones,
+        'valor_abiertas': valor_abiertas_eur,
         'valor_actual': valor_actual,
         'ventas_totales': ventas,
         'dividendos': dividendos,
         'realized_pnl': realized_pnl,
-        'unrealized_pnl': unrealized_pnl,
-        'valor_abiertas': valor_abiertas,
-        'coste_abiertas': coste_abiertas,
+        'unrealized_pnl': unrealized_pnl_eur,
+        'coste_abiertas': coste_abiertas_eur,
         'tir': tir
     }
 
@@ -188,36 +288,32 @@ def tab_resumen():
     with st.spinner('Cargando datos...'):
         df = cargar_datos()
         precios = obtener_precios()
-        eur_usd = precios.get('EURUSD=X', 1.08)
-        m = calcular_metricas_globales(df, precios, eur_usd)
+        m = calcular_metricas_globales(df, precios)
 
-    # Métricas principales en una fila
+    # Métricas principales - Fila 1
     st.markdown("### Métricas Principales")
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric(
-        "Total Invertido",
-        f"€{m['total_invertido']:,.0f}"
-    )
-    col2.metric(
-        "Valor Actual",
+    col1.metric("Total Invertido", f"€{m['total_invertido']:,.0f}")
+    col2.metric("Desinversiones", f"€{m['desinversiones']:,.0f}")
+    col3.metric("Open Positions", f"€{m['valor_abiertas']:,.0f}")
+    col4.metric(
+        "Desinv. + Open",
         f"€{m['valor_actual']:,.0f}",
         f"{((m['valor_actual']/m['total_invertido'])-1)*100:+.1f}%" if m['total_invertido'] > 0 else ""
     )
-    col3.metric(
-        "Realized P&L",
-        f"€{m['realized_pnl']:+,.0f}"
-    )
-    col4.metric(
+
+    # Métricas principales - Fila 2
+    col5, col6, col7 = st.columns(3)
+
+    col5.metric("Realized P&L", f"€{m['realized_pnl']:+,.0f}")
+    col6.metric(
         "Unrealized P&L",
         f"€{m['unrealized_pnl']:+,.0f}",
         f"{(m['unrealized_pnl']/m['coste_abiertas'])*100:+.1f}%" if m['coste_abiertas'] > 0 else ""
     )
-    col5.metric(
-        "TIR",
-        f"{m['tir']*100:+.1f}%"
-    )
+    col7.metric("TIR", f"{m['tir']*100:+.1f}%")
 
     st.markdown("---")
 
@@ -226,17 +322,14 @@ def tab_resumen():
 
     broker_data = []
     for ticker, info in POSICIONES.items():
-        precio_usd = precios.get(info['symbol'], 0)
-        if info['symbol'] == 'CSU.TO':
-            cad_eur = precios.get('CADEUR=X', 0.68)
-            precio_eur = precio_usd * cad_eur
-        else:
-            precio_eur = precio_usd / eur_usd if eur_usd > 0 else 0
-        valor = info['cantidad'] * precio_eur
+        pos = calcular_valor_posicion(ticker, info, precios)
+        valor_eur = convertir_a_eur(pos['valor'], pos['moneda'], precios)
+        coste_eur = convertir_a_eur(info['coste'], info['moneda'], precios)
+
         broker_data.append({
             'broker': info['broker'],
-            'coste': info['coste_eur'],
-            'valor': valor
+            'coste': coste_eur,
+            'valor': valor_eur
         })
 
     df_broker = pd.DataFrame(broker_data).groupby('broker').sum().reset_index()
@@ -262,15 +355,11 @@ def tab_resumen():
         st.markdown("### Distribución por Tipo")
         tipo_data = []
         for ticker, info in POSICIONES.items():
-            precio_usd = precios.get(info['symbol'], 0)
-            if info['symbol'] == 'CSU.TO':
-                cad_eur = precios.get('CADEUR=X', 0.68)
-                precio_eur = precio_usd * cad_eur
-            else:
-                precio_eur = precio_usd / eur_usd if eur_usd > 0 else 0
+            pos = calcular_valor_posicion(ticker, info, precios)
+            valor_eur = convertir_a_eur(pos['valor'], pos['moneda'], precios)
             tipo_data.append({
                 'tipo': info['tipo'],
-                'valor': info['cantidad'] * precio_eur
+                'valor': valor_eur
             })
         df_tipo = pd.DataFrame(tipo_data).groupby('tipo')['valor'].sum().reset_index()
 
@@ -307,14 +396,13 @@ def tab_ytd():
     # Calcular mi rentabilidad YTD (simplificado)
     df = cargar_datos()
     precios = obtener_precios()
-    eur_usd = precios.get('EURUSD=X', 1.08)
-    m = calcular_metricas_globales(df, precios, eur_usd)
+    m = calcular_metricas_globales(df, precios)
 
-    # Depósitos YTD
+    # Depósitos YTD (solo depósitos, no retiradas)
     depositos_ytd = sum(d['cantidad'] for d in DEPOSITOS
-                        if d['fecha'].startswith(str(año_actual)) and d['moneda'] == 'EUR')
+                        if d['fecha'].startswith(str(año_actual)) and d['moneda'] == 'EUR' and d['tipo'] == 'deposito')
     depositos_ytd += sum(d['cantidad'] / 18.0 for d in DEPOSITOS  # MXN a EUR aprox
-                         if d['fecha'].startswith(str(año_actual)) and d['moneda'] == 'MXN')
+                         if d['fecha'].startswith(str(año_actual)) and d['moneda'] == 'MXN' and d['tipo'] == 'deposito')
 
     col1, col2 = st.columns(2)
 
@@ -440,32 +528,31 @@ def tab_posiciones():
     with st.spinner('Obteniendo precios...'):
         precios = obtener_precios()
 
-    eur_usd = precios.get('EURUSD=X', 1.08)
-    cad_eur = precios.get('CADEUR=X', 0.68)
+    eur_usd = precios.get('EUR_USD', 1.08)
+    cad_eur = precios.get('CAD_EUR', 0.65)
 
-    # Calcular valores
+    # Calcular valores usando nueva estructura (coste en moneda original)
     datos = []
     for ticker, info in POSICIONES.items():
-        precio_usd = precios.get(info['symbol'], 0)
-        if info['symbol'] == 'CSU.TO':
-            precio_eur = precio_usd * cad_eur
-        else:
-            precio_eur = precio_usd / eur_usd if eur_usd > 0 else 0
+        # Usar helper que calcula P&L en moneda original
+        pos = calcular_valor_posicion(ticker, info, precios)
 
-        valor = info['cantidad'] * precio_eur
-        pnl = valor - info['coste_eur']
-        pnl_pct = (pnl / info['coste_eur'] * 100) if info['coste_eur'] > 0 else 0
+        # Convertir a EUR para mostrar
+        coste_eur = convertir_a_eur(info['coste'], info['moneda'], precios)
+        valor_eur = convertir_a_eur(pos['valor'], pos['moneda'], precios)
+        pnl_eur = convertir_a_eur(pos['pnl'], pos['moneda'], precios)
 
         datos.append({
             'Ticker': ticker,
             'Broker': info['broker'],
             'Tipo': info['tipo'],
+            'Moneda': info['moneda'],
             'Cantidad': info['cantidad'],
-            'Coste €': info['coste_eur'],
-            'Precio €': precio_eur,
-            'Valor €': valor,
-            'P&L €': pnl,
-            'P&L %': pnl_pct
+            'Coste': info['coste'],
+            'Coste €': coste_eur,
+            'Valor €': valor_eur,
+            'P&L €': pnl_eur,
+            'P&L %': pos['pnl_pct']  # % calculado en moneda original (correcto)
         })
 
     df = pd.DataFrame(datos)
@@ -479,7 +566,7 @@ def tab_posiciones():
 
     st.markdown("---")
 
-    # Gráfico de barras P&L
+    # Gráfico de barras P&L (% en moneda original - correcto)
     st.markdown("### Rentabilidad por Posición")
     df_sorted = df.sort_values('P&L %', ascending=True)
     colors = ['#2ecc71' if x >= 0 else '#e74c3c' for x in df_sorted['P&L %']]
@@ -498,12 +585,14 @@ def tab_posiciones():
 
     # Tabla
     st.markdown("### Detalle")
-    df_display = df.copy()
+    df_display = df[['Ticker', 'Broker', 'Tipo', 'Moneda', 'Cantidad', 'Coste', 'Coste €', 'Valor €', 'P&L €', 'P&L %']].copy()
     df_display['Cantidad'] = df_display['Cantidad'].apply(lambda x: f"{x:,.6f}" if x < 1 else f"{x:,.2f}")
-    for col in ['Coste €', 'Precio €', 'Valor €']:
+    df_display['Coste'] = df_display.apply(lambda r: f"{r['Coste']:,.2f} {df.loc[df['Ticker']==r['Ticker'], 'Moneda'].iloc[0]}", axis=1)
+    for col in ['Coste €', 'Valor €']:
         df_display[col] = df_display[col].apply(lambda x: f"€{x:,.2f}")
     df_display['P&L €'] = df_display['P&L €'].apply(lambda x: f"€{x:+,.2f}")
     df_display['P&L %'] = df_display['P&L %'].apply(lambda x: f"{x:+.1f}%")
+    df_display = df_display.drop(columns=['Moneda'])
 
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
@@ -511,7 +600,7 @@ def tab_posiciones():
 
 # ============== TAB 5: DEPOSITOS ==============
 def tab_depositos():
-    """Timeline vertical de depósitos"""
+    """Timeline vertical de depósitos y retiradas"""
 
     df_dep = pd.DataFrame(DEPOSITOS)
     df_dep['fecha'] = pd.to_datetime(df_dep['fecha'])
@@ -523,73 +612,90 @@ def tab_depositos():
         axis=1
     )
 
-    # Métricas
-    total_eur = df_dep[df_dep['moneda'] == 'EUR']['cantidad'].sum()
-    total_mxn = df_dep[df_dep['moneda'] == 'MXN']['cantidad'].sum()
-    total_equiv = df_dep['cantidad_eur'].sum()
+    # Separar depósitos y retiradas
+    depositos = df_dep[df_dep['tipo'] == 'deposito']
+    retiradas = df_dep[df_dep['tipo'] == 'retirada']
 
+    total_depositos = depositos['cantidad_eur'].sum()
+    total_retiradas = abs(retiradas['cantidad_eur'].sum())
+    flujo_neto = total_depositos - total_retiradas
+
+    # Métricas
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total EUR", f"€{total_eur:,.0f}")
-    col2.metric("Total MXN", f"${total_mxn:,.0f}")
-    col3.metric("Total (equiv. EUR)", f"€{total_equiv:,.0f}")
+    col1.metric("Total Depósitos", f"€{total_depositos:,.0f}")
+    col2.metric("Total Retiradas", f"€{total_retiradas:,.0f}")
+    col3.metric("Flujo Neto", f"€{flujo_neto:,.0f}")
 
     st.markdown("---")
-    st.markdown("### Timeline de Depósitos")
+    st.markdown("### Timeline de Movimientos")
 
-    # Timeline vertical usando markdown y contenedores
+    # Emoji por broker
+    broker_emoji = {'Kraken': '🔵', 'Fintual': '🔴', 'IBKR': '🟢', 'Degiro': '🟠', 'Trading212': '🟣'}
+
+    # Timeline vertical
     for i, row in df_dep.iterrows():
-        año = row['fecha'].year
-
-        # Color por broker
-        color_map = {'Kraken': '🔵', 'Fintual': '🔴', 'IBKR': '🟢'}
-        emoji = color_map.get(row['broker'], '⚪')
+        emoji = broker_emoji.get(row['broker'], '⚪')
+        es_retirada = row['tipo'] == 'retirada'
 
         # Formatear cantidad
         if row['moneda'] == 'EUR':
-            cantidad_str = f"€{row['cantidad']:,.0f}"
+            cantidad_str = f"€{abs(row['cantidad']):,.0f}"
         else:
             cantidad_str = f"${row['cantidad']:,.0f} MXN"
+
+        # Color según tipo
+        color = '#e74c3c' if es_retirada else '#2ecc71'
+        signo = '-' if es_retirada else '+'
+        tipo_label = 'Retirada' if es_retirada else 'Depósito'
 
         fecha_str = row['fecha'].strftime('%d %b %Y')
 
         st.markdown(f"""
-        <div style="display: flex; align-items: center; padding: 10px 0; border-left: 3px solid #ddd; margin-left: 20px; padding-left: 20px;">
+        <div style="display: flex; align-items: center; padding: 10px 0; border-left: 3px solid {color}; margin-left: 20px; padding-left: 20px;">
             <div style="position: absolute; left: 10px; font-size: 20px;">{emoji}</div>
             <div>
-                <strong>{fecha_str}</strong> — {row['broker']}<br>
-                <span style="font-size: 1.2em; color: #2ecc71;">{cantidad_str}</span>
+                <strong>{fecha_str}</strong> — {row['broker']} ({tipo_label})<br>
+                <span style="font-size: 1.2em; color: {color};">{signo}{cantidad_str}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # Gráfico acumulado
-    st.markdown("### Depósitos Acumulados")
-    df_dep_sorted = df_dep.sort_values('fecha')
-    df_dep_sorted['acumulado'] = df_dep_sorted['cantidad_eur'].cumsum()
+    # Gráfico acumulado (flujo neto)
+    st.markdown("### Flujo Neto Acumulado")
+    df_sorted = df_dep.sort_values('fecha').copy()
+    df_sorted['acumulado'] = df_sorted['cantidad_eur'].cumsum()
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=df_dep_sorted['fecha'],
-        y=df_dep_sorted['acumulado'],
+        x=df_sorted['fecha'],
+        y=df_sorted['acumulado'],
         mode='lines+markers',
-        line=dict(color='#2ecc71', width=3),
-        marker=dict(size=10),
+        line=dict(color='#3498db', width=3),
+        marker=dict(size=8),
         hovertemplate='%{x}<br>Acumulado: €%{y:,.0f}<extra></extra>'
     ))
+    fig.add_hline(y=0, line_dash="dash", line_color="gray")
     fig.update_layout(
         xaxis_title="",
-        yaxis_title="Total Depositado (€)",
+        yaxis_title="Flujo Neto (€)",
         height=300
     )
     st.plotly_chart(fig, use_container_width=True)
 
     # Tabla resumen por broker
     st.markdown("### Por Broker")
-    resumen = df_dep.groupby('broker')['cantidad_eur'].sum().reset_index()
-    resumen.columns = ['Broker', 'Total €']
-    resumen['Total €'] = resumen['Total €'].apply(lambda x: f"€{x:,.0f}")
+    resumen_dep = depositos.groupby('broker')['cantidad_eur'].sum().reset_index()
+    resumen_dep.columns = ['Broker', 'Depósitos']
+    resumen_ret = retiradas.groupby('broker')['cantidad_eur'].sum().abs().reset_index()
+    resumen_ret.columns = ['Broker', 'Retiradas']
+
+    resumen = resumen_dep.merge(resumen_ret, on='Broker', how='outer').fillna(0)
+    resumen['Neto'] = resumen['Depósitos'] - resumen['Retiradas']
+    resumen['Depósitos'] = resumen['Depósitos'].apply(lambda x: f"€{x:,.0f}")
+    resumen['Retiradas'] = resumen['Retiradas'].apply(lambda x: f"€{x:,.0f}")
+    resumen['Neto'] = resumen['Neto'].apply(lambda x: f"€{x:,.0f}")
     st.dataframe(resumen, use_container_width=True, hide_index=True)
 
 # ============== MAIN ==============
