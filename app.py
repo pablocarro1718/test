@@ -131,7 +131,8 @@ def obtener_precios():
     for symbol in symbols:
         try:
             ticker = yf.Ticker(symbol)
-            hist = ticker.history(period='1d')
+            # Usar 5d en vez de 1d para cubrir fines de semana y festivos
+            hist = ticker.history(period='5d')
             if not hist.empty:
                 precios[symbol] = hist['Close'].iloc[-1]
         except:
