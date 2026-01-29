@@ -40,6 +40,9 @@ jobs:
           KRAKEN_PRIVATE_KEY: ${{ secrets.KRAKEN_PRIVATE_KEY }}
         run: python kraken_sync.py
 
+      - name: Normalize all transactions
+        run: python normalizar_inversiones.py
+
       - name: Commit and push changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"

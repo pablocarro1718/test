@@ -39,22 +39,12 @@ def check_password():
 # ============== DATOS ==============
 CSV_PATH = os.path.join(os.path.dirname(__file__), 'inversiones_unificadas.csv')
 
-# Posiciones abiertas actuales (coste en moneda original + fecha apertura para YTD)
-POSICIONES = {
-    # Kraken - Crypto (compradas en EUR, múltiples compras consolidadas)
-    'BTC': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.05678, 'coste': 1048.29, 'moneda': 'EUR', 'symbol': 'BTC-USD', 'fecha_apertura': '2020-05-19'},
-    'ETH': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 0.34793, 'coste': 700.75, 'moneda': 'EUR', 'symbol': 'ETH-USD', 'fecha_apertura': '2021-05-19'},
-    'SOL': {'broker': 'Kraken', 'tipo': 'Crypto', 'cantidad': 2.13768, 'coste': 298.95, 'moneda': 'EUR', 'symbol': 'SOL-USD', 'fecha_apertura': '2021-12-03'},
-    # Fintual - Stocks/ETFs (comprados en USD)
-    'NU': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 91.449629, 'coste': 1050.00, 'moneda': 'USD', 'symbol': 'NU', 'fecha_apertura': '2025-12-18'},
-    'AMZN': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 5.998302, 'coste': 1129.93, 'moneda': 'USD', 'symbol': 'AMZN', 'fecha_apertura': '2025-12-18'},
-    'SPY': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 0.461054, 'coste': 250.00, 'moneda': 'USD', 'symbol': 'SPY', 'fecha_apertura': '2025-12-18'},
-    'IEV': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 20.544768, 'coste': 1305.62, 'moneda': 'USD', 'symbol': 'IEV', 'fecha_apertura': '2025-12-18'},
-    'ARGT': {'broker': 'Fintual', 'tipo': 'ETF', 'cantidad': 15.990136, 'coste': 1410.33, 'moneda': 'USD', 'symbol': 'ARGT', 'fecha_apertura': '2025-12-18'},
-    'AAPL': {'broker': 'Fintual', 'tipo': 'Stock', 'cantidad': 4.564051, 'coste': 1241.65, 'moneda': 'USD', 'symbol': 'AAPL', 'fecha_apertura': '2026-01-01'},
-    # IBKR
-    'CSU': {'broker': 'IBKR', 'tipo': 'Stock', 'cantidad': 0.3543, 'coste': 967.78, 'moneda': 'CAD', 'symbol': 'CSU.TO', 'fecha_apertura': '2026-01-20'},
-    'URA': {'broker': 'IBKR', 'tipo': 'ETF', 'cantidad': 10.0, 'coste': 552.10, 'moneda': 'USD', 'symbol': 'URA', 'fecha_apertura': '2026-01-20'},
+# Mapeo de tickers CSV a símbolos yfinance
+SYMBOL_MAP = {
+    'BTC': 'BTC-USD',
+    'ETH': 'ETH-USD',
+    'SOL': 'SOL-USD',
+    'CSU': 'CSU.TO',  # Toronto Stock Exchange
 }
 
 # Historial de depósitos y retiradas (fecha, broker, cantidad, moneda, tipo)
@@ -102,14 +92,97 @@ DEPOSITOS = [
     {'fecha': '2026-01-23', 'broker': 'IBKR', 'cantidad': 1000.00, 'moneda': 'EUR', 'tipo': 'deposito'},
 ]
 
-# Flujos para TIR
-FLUJOS_ABIERTOS = [
-    ('2020-05-19', -248.00), ('2021-03-02', -500.00), ('2021-12-03', -200.00),
-    ('2022-01-25', -600.00), ('2022-06-20', -500.00),
-    ('2025-03-10', -1138.82), ('2025-04-03', -927.31), ('2025-05-29', -1207.52),
-    ('2025-10-24', -1335.43), ('2025-12-15', -1372.11),
-    ('2026-01-02', -1639.00), ('2026-01-23', -1000.00),
-]
+# ============== FUNCIONES PARA POSICIONES DINÁMICAS ==============
+@st.cache_data(ttl=60)
+def calcular_posiciones_desde_csv():
+    """
+    Calcula las posiciones abiertas dinámicamente desde inversiones_unificadas.csv
+    Agrupa por (broker, ticker), calcula cantidad neta y coste promedio ponderado.
+    """
+    df = pd.read_csv(CSV_PATH)
+
+    posiciones = {}
+
+    # Agrupar por broker y ticker
+    for (broker, ticker), grupo in df.groupby(['broker', 'ticker']):
+        buys = grupo[grupo['tipo_operacion'] == 'BUY']
+        sells = grupo[grupo['tipo_operacion'] == 'SELL']
+
+        total_comprado = buys['cantidad'].sum()
+        total_vendido = sells['cantidad'].sum()
+        neto = total_comprado - total_vendido
+
+        # Si posición cerrada (o casi), ignorar
+        if neto < 0.0001:
+            continue
+
+        # Calcular coste en moneda original usando importe_bruto
+        # importe_bruto = cantidad * precio_unitario en moneda_original
+        total_coste_orig = (buys['cantidad'] * buys['precio_unitario']).sum()
+
+        # Si hay ventas parciales, ajustar coste proporcionalmente (coste promedio)
+        if total_vendido > 0 and total_comprado > 0:
+            ratio = neto / total_comprado
+            coste_orig = total_coste_orig * ratio
+        else:
+            coste_orig = total_coste_orig
+
+        # Obtener metadatos de la compra más reciente
+        ultima_compra = buys.iloc[-1]
+        moneda = ultima_compra['moneda_original']
+        tipo = ultima_compra['tipo_activo']
+
+        # Fecha de primera compra
+        primera_compra = buys['fecha'].min()
+        if hasattr(primera_compra, 'strftime'):
+            fecha_apertura = primera_compra.strftime('%Y-%m-%d')
+        else:
+            fecha_apertura = str(primera_compra)[:10]
+
+        # Mapear a símbolo yfinance
+        symbol = SYMBOL_MAP.get(ticker, ticker)
+
+        # Clave única: usar ticker, si hay duplicado agregar broker
+        key = ticker
+        if key in posiciones:
+            key = f"{ticker}_{broker}"
+
+        posiciones[key] = {
+            'broker': broker,
+            'tipo': tipo,
+            'cantidad': round(neto, 8),
+            'coste': round(coste_orig, 2),
+            'moneda': moneda,
+            'symbol': symbol,
+            'fecha_apertura': fecha_apertura,
+            'ticker_original': ticker,
+        }
+
+    return posiciones
+
+
+def calcular_flujos_abiertos(posiciones):
+    """
+    Calcula los flujos de inversión (para TIR) basados en los depósitos
+    a brokers que tienen posiciones abiertas.
+    """
+    brokers_abiertos = set(p['broker'] for p in posiciones.values())
+    flujos = []
+
+    for dep in DEPOSITOS:
+        if dep['broker'] in brokers_abiertos and dep['tipo'] == 'deposito':
+            # Convertir a EUR si es necesario
+            if dep['moneda'] == 'EUR':
+                cantidad_eur = dep['cantidad']
+            elif dep['moneda'] == 'MXN':
+                cantidad_eur = dep['cantidad'] / 18.0  # Aproximado
+            else:
+                cantidad_eur = dep['cantidad']
+
+            flujos.append((dep['fecha'], -cantidad_eur))
+
+    return flujos
+
 
 # ============== FUNCIONES AUXILIARES ==============
 @st.cache_data
@@ -121,9 +194,9 @@ def cargar_datos():
     return df
 
 @st.cache_data(ttl=300)
-def obtener_precios():
+def obtener_precios(posiciones):
     """Obtiene precios de Yahoo Finance y tipos de cambio"""
-    symbols = list(set([p['symbol'] for p in POSICIONES.values()]))
+    symbols = list(set([p['symbol'] for p in posiciones.values()]))
     # Añadir tipos de cambio necesarios
     symbols.extend(['EURUSD=X', 'CADUSD=X'])
 
@@ -250,7 +323,7 @@ def calcular_xirr(flujos, valor_final):
     except:
         return 0
 
-def calcular_metricas_globales(df, precios):
+def calcular_metricas_globales(df, precios, posiciones):
     """Calcula todas las métricas globales del portfolio"""
 
     # Calcular valor y coste de posiciones abiertas (todo convertido a EUR)
@@ -258,7 +331,7 @@ def calcular_metricas_globales(df, precios):
     coste_abiertas_eur = 0
     unrealized_pnl_eur = 0
 
-    for ticker, info in POSICIONES.items():
+    for ticker, info in posiciones.items():
         pos = calcular_valor_posicion(ticker, info, precios)
 
         # Convertir a EUR para consolidación
@@ -280,7 +353,8 @@ def calcular_metricas_globales(df, precios):
     desinversiones = ventas + dividendos
     valor_actual = desinversiones + valor_abiertas_eur
     realized_pnl = desinversiones - (compras - coste_abiertas_eur)
-    tir = calcular_xirr(FLUJOS_ABIERTOS, valor_abiertas_eur)
+    flujos_abiertos = calcular_flujos_abiertos(posiciones)
+    tir = calcular_xirr(flujos_abiertos, valor_abiertas_eur)
 
     return {
         'total_invertido': total_invertido,
@@ -301,8 +375,9 @@ def tab_resumen():
 
     with st.spinner('Cargando datos...'):
         df = cargar_datos()
-        precios = obtener_precios()
-        m = calcular_metricas_globales(df, precios)
+        posiciones = calcular_posiciones_desde_csv()
+        precios = obtener_precios(posiciones)
+        m = calcular_metricas_globales(df, precios, posiciones)
 
     # Calcular P&L total
     total_pnl = m['realized_pnl'] + m['unrealized_pnl']
@@ -341,7 +416,7 @@ def tab_resumen():
     st.markdown("### 🏦 Por Broker")
 
     broker_data = []
-    for ticker, info in POSICIONES.items():
+    for ticker, info in posiciones.items():
         pos = calcular_valor_posicion(ticker, info, precios)
         valor_eur = convertir_a_eur(pos['valor'], pos['moneda'], precios)
         coste_eur = convertir_a_eur(info['coste'], info['moneda'], precios)
@@ -373,7 +448,7 @@ def tab_resumen():
     with col1:
         st.markdown("### Distribución por Tipo")
         tipo_data = []
-        for ticker, info in POSICIONES.items():
+        for ticker, info in posiciones.items():
             pos = calcular_valor_posicion(ticker, info, precios)
             valor_eur = convertir_a_eur(pos['valor'], pos['moneda'], precios)
             tipo_data.append({
@@ -406,14 +481,15 @@ def tab_ytd():
     inicio_año = f"{año_actual}-01-01"
     st.markdown(f"### Performance {año_actual}")
 
-    precios = obtener_precios()
+    posiciones = calcular_posiciones_desde_csv()
+    precios = obtener_precios(posiciones)
 
     # Calcular performance por posición
     datos_ytd = []
     total_valor_inicio = 0
     total_valor_actual = 0
 
-    for ticker, info in POSICIONES.items():
+    for ticker, info in posiciones.items():
         pos = calcular_valor_posicion(ticker, info, precios)
         valor_actual_eur = convertir_a_eur(pos['valor'], pos['moneda'], precios)
         coste_eur = convertir_a_eur(info['coste'], info['moneda'], precios)
@@ -515,7 +591,8 @@ def tab_libro_mayor():
     """Tabla de todas las operaciones con filtros"""
 
     df = cargar_datos()
-    precios = obtener_precios()
+    posiciones = calcular_posiciones_desde_csv()
+    precios = obtener_precios(posiciones)
     eur_usd = precios.get('EURUSD=X', 1.08)
 
     # Filtros en columnas
@@ -586,14 +663,15 @@ def tab_posiciones():
     """Posiciones abiertas con precios en tiempo real"""
 
     with st.spinner('Obteniendo precios...'):
-        precios = obtener_precios()
+        posiciones = calcular_posiciones_desde_csv()
+        precios = obtener_precios(posiciones)
 
     eur_usd = precios.get('EUR_USD', 1.08)
     cad_eur = precios.get('CAD_EUR', 0.65)
 
     # Calcular valores usando nueva estructura (coste en moneda original)
     datos = []
-    for ticker, info in POSICIONES.items():
+    for ticker, info in posiciones.items():
         # Usar helper que calcula P&L en moneda original
         pos = calcular_valor_posicion(ticker, info, precios)
 
@@ -618,7 +696,8 @@ def tab_posiciones():
     df = pd.DataFrame(datos)
 
     # Calcular TIR de posiciones abiertas
-    tir = calcular_xirr(FLUJOS_ABIERTOS, df['Valor €'].sum())
+    flujos_abiertos = calcular_flujos_abiertos(posiciones)
+    tir = calcular_xirr(flujos_abiertos, df['Valor €'].sum())
 
     # Métricas
     col1, col2, col3, col4, col5 = st.columns(5)

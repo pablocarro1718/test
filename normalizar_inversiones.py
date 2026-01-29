@@ -329,6 +329,60 @@ def procesar_trading212_dividends():
             })
 
 
+def procesar_ibkr():
+    """Procesa el archivo de transacciones de IBKR (generado por ibkr_sync.py)."""
+    archivo = DIR / "ibkr_transactions.csv"
+
+    if not archivo.exists():
+        print("    (archivo ibkr_transactions.csv no encontrado, omitiendo)")
+        return
+
+    with open(archivo, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+
+        for row in reader:
+            try:
+                fecha = row["Fecha"]
+                ticker = row["Ticker"]
+                accion = row.get("Acción", row.get("Accion", "BUY"))
+                tipo_activo = row.get("Tipo", "Stock")
+                cantidad = float(row.get("Cantidad", 0))
+                precio = float(row.get("Precio_orig", 0))
+                moneda = row.get("Moneda_orig", "USD")
+                importe_bruto = float(row.get("Coste_orig", 0))
+                importe_eur = float(row.get("Coste_EUR", 0)) or importe_bruto
+                tc = row.get("TC_EUR", "")
+                comision = float(row.get("Comisión", row.get("Comision", 0)))
+                isin = row.get("ISIN", "")
+
+                # Calcular importe neto
+                if accion == "BUY":
+                    importe_neto = -abs(importe_eur) - comision
+                else:
+                    importe_neto = abs(importe_eur) - comision
+
+                todas_operaciones.append({
+                    "fecha": fecha,
+                    "broker": "IBKR",
+                    "tipo_operacion": accion,
+                    "tipo_activo": tipo_activo,
+                    "ticker": ticker,
+                    "isin": isin,
+                    "cantidad": round(cantidad, 8),
+                    "precio_unitario": round(precio, 4),
+                    "moneda_original": moneda,
+                    "importe_bruto": round(importe_bruto, 2),
+                    "importe_eur": round(abs(importe_eur), 2),
+                    "tipo_cambio": tc if tc else "",
+                    "comisiones_eur": round(comision, 2),
+                    "importe_neto_eur": round(importe_neto, 2),
+                    "notas": "",
+                })
+            except Exception as e:
+                print(f"    ⚠️ Error procesando fila IBKR: {e}")
+                continue
+
+
 def guardar_csv_unificado():
     """Guarda todas las operaciones en un CSV unificado."""
     # Ordenar por fecha (las "PENDIENTE" irán al final)
@@ -374,17 +428,20 @@ def main():
     print("NORMALIZADOR DE INVERSIONES")
     print("=" * 60)
 
-    print("\n[1/4] Procesando Degiro...")
+    print("\n[1/5] Procesando Degiro...")
     procesar_degiro()
 
-    print("[2/4] Procesando Kraken...")
+    print("[2/5] Procesando Kraken...")
     procesar_kraken()
 
-    print("[3/4] Procesando Trading212 (operaciones)...")
+    print("[3/5] Procesando Trading212 (operaciones)...")
     procesar_trading212_results()
 
-    print("[4/4] Procesando Trading212 (dividendos)...")
+    print("[4/5] Procesando Trading212 (dividendos)...")
     procesar_trading212_dividends()
+
+    print("[5/5] Procesando IBKR...")
+    procesar_ibkr()
 
     print("\nGenerando archivo unificado...")
     guardar_csv_unificado()
