@@ -1,0 +1,29 @@
+# Secrets - NUNCA subir a GitHub
+.streamlit/secrets.toml
+.env
+*.env.rtf
+
+# Archivos de datos generados localmente
+ibkr_raw_response.txt
+ibkr_transactions.csv
+ibkr_deposits.csv
+kraken_transactions.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+
+# Virtual environments
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

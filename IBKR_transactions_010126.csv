@@ -1,0 +1,23 @@
+Statement,Header,Nombre del campo,Valor del campo
+Statement,Data,Title,Transaction History
+Statement,Data,Period,"Enero 14, 2026 - Enero 20, 2026"
+Statement,Data,WhenGenerated,"2026-01-21, 04:29:18 EST"
+Summary,Header,Nombre del campo,Valor del campo
+Summary,Data,Divisa base,USD
+Summary,Data,Efectivo inicial,1682.28
+Summary,Data,Cambio,-830.40358424636
+Summary,Data,Efectivo final,851.87641575364
+Transaction History,Header,Date,Account,Description,Transaction Type,Symbol,Quantity,Price,Gross Amount ,Commission,Net Amount
+Transaction History,Data,2026-01-20,U***27441,CONSTELLATION SOFTWARE INC,Buy,CSU,0.1506,2748.86,-299.1821289732,-0.7227,-299.9048289732
+Transaction History,Data,2026-01-20,U***27441,Cantidad Neta en Divisa Base de Operación en Forex: 1 USD.MXN,Forex Trade Component,USD.MXN,1.0,17.64112,-0.0024742851200001414,-,-0.0024742851200001414
+Transaction History,Data,2026-01-20,U***27441,Cantidad Neta en Divisa Base de Operación en Forex: 300 USD.MXN,Forex Trade Component,USD.MXN,300.0,17.64103,-0.7407512340000153,-,-0.7407512340000153
+Transaction History,Data,2026-01-20,U***27441,Cantidad Neta en Divisa Base de Operación en Forex: -0.73 USD.CAD,Forex Trade Component,USD.CAD,-0.73,1.38349,-1.107972100000687E-4,-,-1.107972100000687E-4
+Transaction History,Data,2026-01-20,U***27441,Cantidad Neta en Divisa Base de Operación en Forex: -299.21 USD.CAD,Forex Trade Component,USD.CAD,-299.21,1.38308,-0.1340712136399702,-,-0.1340712136399702
+Transaction History,Data,2026-01-20,U***27441,Cantidad Neta en Divisa Base de Operación en Forex: -0.1 USD.CAD,Forex Trade Component,USD.CAD,-0.1,1.38313,-4.119490000001336E-5,-,-4.119490000001336E-5
+Transaction History,Data,2026-01-20,U***27441,GLOBAL X URANIUM ETF,Buy,URA,5.0,55.11,-275.55,-1.0,-276.55
+Transaction History,Data,2026-01-20,U***27441,GLOBAL X URANIUM ETF,Buy,URA,5.0,55.11,-275.55,-,-275.55
+Transaction History,Data,2026-01-20,U***27441,Cantidad Neta en Divisa Base de Operación en Forex: 551 USD.MXN,Forex Trade Component,USD.MXN,551.0,17.59826,-0.021336240759978864,-,-0.021336240759978864
+Transaction History,Data,2026-01-20,U***27441,Cantidad Neta en Divisa Base de Operación en Forex: 1 USD.MXN,Forex Trade Component,USD.MXN,1.0,17.59698,3.401452000006966E-5,-,3.401452000006966E-5
+Transaction History,Data,2026-01-20,U***27441,Cantidad Neta en Divisa Base de Operación en Forex: -0.00624326 USD.CAD,Forex Trade Component,USD.CAD,-0.00624326,1.38328489,-1.8782599999992572E-6,-,-1.8782599999992572E-6
+Transaction History,Data,2026-01-20,U***27441,Cantidad Neta en Divisa Base de Operación en Forex: 0.00718675 USD.CAD,Forex Trade Component,USD.CAD,0.00718675,1.38417148,-2.452789999999455E-6,-,-2.452789999999455E-6
+Transaction History,Data,2026-01-20,U***27441,FX Translations P&L,Adjustment,-,-,-,22.49999999900001,-,22.49999999900001
