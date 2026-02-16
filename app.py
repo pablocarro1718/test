@@ -302,6 +302,37 @@ def obtener_ytd_benchmark():
         pass
     return pd.DataFrame()
 
+
+@st.cache_data(ttl=3600)
+def obtener_precios_inicio_año(symbols_tuple):
+    """
+    Obtiene precios de cierre del primer día de trading del año para cada símbolo.
+    Recibe tuple (para que sea hashable por st.cache_data).
+    Retorna dict {symbol: precio_inicio_año}
+    """
+    año_actual = datetime.now().year
+    inicio = f"{año_actual}-01-01"
+    fin = f"{año_actual}-01-10"  # Margen para cubrir festivos
+
+    precios_inicio = {}
+    # Incluir FX rates para conversión histórica
+    all_symbols = list(symbols_tuple) + ['EURUSD=X', 'CADUSD=X']
+
+    for symbol in all_symbols:
+        try:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(start=inicio, end=fin)
+            if not hist.empty:
+                precios_inicio[symbol] = hist['Close'].iloc[0]
+        except:
+            pass
+
+    # Calcular FX rates históricos a inicio de año
+    precios_inicio['EUR_USD_JAN1'] = precios_inicio.get('EURUSD=X', 1.08)
+    precios_inicio['CAD_USD_JAN1'] = precios_inicio.get('CADUSD=X', 0.70)
+
+    return precios_inicio
+
 def calcular_xirr(flujos, valor_final):
     """Calcula la TIR (XIRR)"""
     if not flujos:
@@ -475,14 +506,27 @@ def tab_resumen():
 
 # ============== TAB 2: YTD ==============
 def tab_ytd():
-    """Performance del año actual vs benchmark"""
+    """Performance YTD: precio a 1 de enero para posiciones pre-año, coste para las nuevas"""
 
     año_actual = datetime.now().year
     inicio_año = f"{año_actual}-01-01"
-    st.markdown(f"### Performance {año_actual}")
+    st.markdown(f"### Performance YTD {año_actual}")
 
-    posiciones = calcular_posiciones_desde_csv()
-    precios = obtener_precios(posiciones)
+    with st.spinner('Calculando performance YTD...'):
+        posiciones = calcular_posiciones_desde_csv()
+        precios = obtener_precios(posiciones)
+
+        # Obtener precios históricos a 1 de enero
+        symbols_pre_año = tuple(set(
+            info['symbol'] for info in posiciones.values()
+            if info.get('fecha_apertura', '2020-01-01') < inicio_año
+        ))
+        precios_jan1 = obtener_precios_inicio_año(symbols_pre_año) if symbols_pre_año else {}
+
+        eur_usd_actual = precios.get('EUR_USD', 1.08)
+        cad_usd_actual = precios.get('CAD_USD', 0.70)
+        eur_usd_jan1 = precios_jan1.get('EUR_USD_JAN1', eur_usd_actual)
+        cad_usd_jan1 = precios_jan1.get('CAD_USD_JAN1', cad_usd_actual)
 
     # Calcular performance por posición
     datos_ytd = []
@@ -490,41 +534,69 @@ def tab_ytd():
     total_valor_actual = 0
 
     for ticker, info in posiciones.items():
-        pos = calcular_valor_posicion(ticker, info, precios)
-        valor_actual_eur = convertir_a_eur(pos['valor'], pos['moneda'], precios)
-        coste_eur = convertir_a_eur(info['coste'], info['moneda'], precios)
-
+        symbol = info['symbol']
+        cantidad = info['cantidad']
+        moneda_coste = info['moneda']
         fecha_apertura = info.get('fecha_apertura', '2020-01-01')
         abierta_antes_año = fecha_apertura < inicio_año
 
-        if abierta_antes_año:
-            # Posición existía a 01/01 - usamos coste como proxy del valor inicial
-            # (idealmente tendríamos precio histórico, pero usamos coste)
-            valor_inicio = coste_eur
-            rentabilidad = pos['pnl_pct']
-            tipo_rent = "Desde compra"
-        else:
-            # Posición abierta este año - rentabilidad desde compra
-            valor_inicio = coste_eur
-            rentabilidad = pos['pnl_pct']
-            tipo_rent = "Desde compra"
+        # Valor actual (misma lógica que el resto de la app)
+        pos = calcular_valor_posicion(ticker, info, precios)
+        valor_actual_eur = convertir_a_eur(pos['valor'], pos['moneda'], precios)
 
-        total_valor_inicio += valor_inicio
+        if abierta_antes_año and symbol in precios_jan1:
+            # --- Posición pre-2026: usar precio a 1 de enero ---
+            precio_jan1_raw = precios_jan1[symbol]
+
+            # Convertir precio Jan 1 a moneda del coste (misma lógica que calcular_valor_posicion)
+            if symbol.endswith('.TO'):
+                moneda_precio = 'CAD'
+            else:
+                moneda_precio = 'USD'
+
+            if moneda_coste == moneda_precio:
+                precio_jan1_conv = precio_jan1_raw
+            elif moneda_coste == 'EUR' and moneda_precio == 'USD':
+                precio_jan1_conv = precio_jan1_raw / eur_usd_jan1 if eur_usd_jan1 > 0 else 0
+            elif moneda_coste == 'EUR' and moneda_precio == 'CAD':
+                precio_jan1_conv = precio_jan1_raw * cad_usd_jan1 / eur_usd_jan1 if eur_usd_jan1 > 0 else 0
+            elif moneda_coste == 'CAD' and moneda_precio == 'USD':
+                precio_jan1_conv = precio_jan1_raw / cad_usd_jan1 if cad_usd_jan1 > 0 else 0
+            else:
+                precio_jan1_conv = precio_jan1_raw
+
+            valor_inicio_orig = cantidad * precio_jan1_conv
+            valor_inicio_eur = convertir_a_eur(valor_inicio_orig, moneda_coste, precios)
+            tipo_ref = "1 Ene"
+        else:
+            # --- Posición 2026: usar coste de compra ---
+            valor_inicio_eur = convertir_a_eur(info['coste'], moneda_coste, precios)
+            tipo_ref = "Compra"
+
+        # Calcular retorno YTD
+        pnl_ytd_eur = valor_actual_eur - valor_inicio_eur
+        ytd_pct = (pnl_ytd_eur / valor_inicio_eur * 100) if valor_inicio_eur > 0 else 0
+
+        total_valor_inicio += valor_inicio_eur
         total_valor_actual += valor_actual_eur
 
         datos_ytd.append({
             'Ticker': ticker,
             'Broker': info['broker'],
-            'Fecha Apertura': fecha_apertura,
-            'Abierta antes 2026': 'Sí' if abierta_antes_año else 'No',
-            'Coste': coste_eur,
+            'Referencia': tipo_ref,
+            'Valor Inicio': valor_inicio_eur,
             'Valor Actual': valor_actual_eur,
-            'P&L €': valor_actual_eur - coste_eur,
-            'Rentabilidad %': rentabilidad,
-            'Tipo': tipo_rent
+            'P&L YTD €': pnl_ytd_eur,
+            'YTD %': ytd_pct,
         })
 
     df_ytd = pd.DataFrame(datos_ytd)
+
+    # Calcular peso de cada posición sobre el total
+    if total_valor_inicio > 0:
+        df_ytd['Peso %'] = df_ytd['Valor Inicio'] / total_valor_inicio * 100
+    else:
+        df_ytd['Peso %'] = 0
 
     # Rentabilidad total ponderada
     rentabilidad_total = ((total_valor_actual - total_valor_inicio) / total_valor_inicio * 100) if total_valor_inicio > 0 else 0
@@ -536,7 +608,7 @@ def tab_ytd():
     # Métricas principales
     col1, col2, col3 = st.columns(3)
 
-    col1.metric("Mi Portfolio", f"{rentabilidad_total:+.1f}%")
+    col1.metric("Mi Portfolio YTD", f"{rentabilidad_total:+.1f}%")
     col2.metric("S&P 500 YTD", f"{spy_return:+.1f}%")
     diff = rentabilidad_total - spy_return
     col3.metric("vs Benchmark", f"{diff:+.1f}%",
@@ -547,17 +619,18 @@ def tab_ytd():
     # Tabla detallada
     st.markdown("### Detalle por Posición")
 
-    # Ordenar por rentabilidad
-    df_display = df_ytd.sort_values('Rentabilidad %', ascending=False).copy()
+    # Ordenar por retorno YTD
+    df_display = df_ytd.sort_values('YTD %', ascending=False).copy()
 
     # Formatear columnas
-    df_display['Coste'] = df_display['Coste'].apply(lambda x: f"€{x:,.0f}")
+    df_display['Valor Inicio'] = df_display['Valor Inicio'].apply(lambda x: f"€{x:,.0f}")
     df_display['Valor Actual'] = df_display['Valor Actual'].apply(lambda x: f"€{x:,.0f}")
-    df_display['P&L €'] = df_display['P&L €'].apply(lambda x: f"€{x:+,.0f}")
-    df_display['Rentabilidad %'] = df_display['Rentabilidad %'].apply(lambda x: f"{x:+.1f}%")
+    df_display['P&L YTD €'] = df_display['P&L YTD €'].apply(lambda x: f"€{x:+,.0f}")
+    df_display['YTD %'] = df_display['YTD %'].apply(lambda x: f"{x:+.1f}%")
+    df_display['Peso %'] = df_display['Peso %'].apply(lambda x: f"{x:.1f}%")
 
     st.dataframe(
-        df_display[['Ticker', 'Broker', 'Fecha Apertura', 'Coste', 'Valor Actual', 'P&L €', 'Rentabilidad %']],
+        df_display[['Ticker', 'Broker', 'Referencia', 'Valor Inicio', 'Valor Actual', 'P&L YTD €', 'YTD %', 'Peso %']],
         use_container_width=True,
         hide_index=True
     )
@@ -577,6 +650,9 @@ def tab_ytd():
             line=dict(color='#636EFA', width=2),
             hovertemplate='%{x}<br>Return: %{y:.1f}%<extra></extra>'
         ))
+        fig.add_hline(y=rentabilidad_total, line_dash="dot", line_color="#00CC96",
+                      annotation_text=f"Mi Portfolio: {rentabilidad_total:+.1f}%",
+                      annotation_position="top left")
         fig.add_hline(y=0, line_dash="dash", line_color="gray")
         fig.update_layout(
             xaxis_title="",
