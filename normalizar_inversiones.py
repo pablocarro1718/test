@@ -383,6 +383,57 @@ def procesar_ibkr():
                 continue
 
 
+def procesar_fintual():
+    """Procesa el archivo de transacciones de Fintual."""
+    archivo = DIR / "fintual_transactions_USD.csv"
+
+    if not archivo.exists():
+        print("    (archivo fintual_transactions_USD.csv no encontrado, omitiendo)")
+        return
+
+    with open(archivo, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+
+        for row in reader:
+            ticker = row["Ticker Symbol"].strip()
+            cantidad = float(row["Filled Shares"])
+
+            # Parsear importe: "1241.65 USD" → 1241.65
+            importe_str = row["Requested Amount"].replace("USD", "").strip()
+            importe_usd = float(importe_str)
+
+            # Precio unitario implícito
+            precio = importe_usd / cantidad if cantidad else 0
+
+            # Parsear fecha: "01/01/2026, 13:03:45 (GMT-6)" → "2026-01-01"
+            fecha_str = row["Created At"].split(",")[0].strip()
+            fecha = datetime.strptime(fecha_str, "%d/%m/%Y").strftime("%Y-%m-%d")
+
+            # Clasificar tipo de activo
+            if ticker in ("SPY", "IEV", "ARGT"):
+                tipo_activo = "ETF"
+            else:
+                tipo_activo = "Stock"
+
+            todas_operaciones.append({
+                "fecha": fecha,
+                "broker": "Fintual",
+                "tipo_operacion": "BUY",
+                "tipo_activo": tipo_activo,
+                "ticker": ticker,
+                "isin": "",
+                "cantidad": round(cantidad, 8),
+                "precio_unitario": round(precio, 4),
+                "moneda_original": "USD",
+                "importe_bruto": round(importe_usd, 2),
+                "importe_eur": round(importe_usd, 2),  # Aproximado, se refina en app.py
+                "tipo_cambio": "",
+                "comisiones_eur": 0,
+                "importe_neto_eur": round(-importe_usd, 2),
+                "notas": "",
+            })
+
+
 def guardar_csv_unificado():
     """Guarda todas las operaciones en un CSV unificado."""
     # Ordenar por fecha (las "PENDIENTE" irán al final)
@@ -428,20 +479,23 @@ def main():
     print("NORMALIZADOR DE INVERSIONES")
     print("=" * 60)
 
-    print("\n[1/5] Procesando Degiro...")
+    print("\n[1/6] Procesando Degiro...")
     procesar_degiro()
 
-    print("[2/5] Procesando Kraken...")
+    print("[2/6] Procesando Kraken...")
     procesar_kraken()
 
-    print("[3/5] Procesando Trading212 (operaciones)...")
+    print("[3/6] Procesando Trading212 (operaciones)...")
     procesar_trading212_results()
 
-    print("[4/5] Procesando Trading212 (dividendos)...")
+    print("[4/6] Procesando Trading212 (dividendos)...")
     procesar_trading212_dividends()
 
-    print("[5/5] Procesando IBKR...")
+    print("[5/6] Procesando IBKR...")
     procesar_ibkr()
+
+    print("[6/6] Procesando Fintual...")
+    procesar_fintual()
 
     print("\nGenerando archivo unificado...")
     guardar_csv_unificado()
