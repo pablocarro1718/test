@@ -384,7 +384,7 @@ def procesar_ibkr():
 
 
 def procesar_fintual():
-    """Procesa el archivo de transacciones de Fintual."""
+    """Procesa el archivo de transacciones de Fintual (compras y dividendos)."""
     archivo = DIR / "fintual_transactions_USD.csv"
 
     if not archivo.exists():
@@ -396,18 +396,12 @@ def procesar_fintual():
 
         for row in reader:
             ticker = row["Ticker Symbol"].strip()
-            cantidad = float(row["Filled Shares"])
+            tipo_op = row["Type"].strip().upper()
+            fecha = row["Created At"].strip()
 
             # Parsear importe: "1241.65 USD" → 1241.65
             importe_str = row["Requested Amount"].replace("USD", "").strip()
             importe_usd = float(importe_str)
-
-            # Precio unitario implícito
-            precio = importe_usd / cantidad if cantidad else 0
-
-            # Parsear fecha: "01/01/2026, 13:03:45 (GMT-6)" → "2026-01-01"
-            fecha_str = row["Created At"].split(",")[0].strip()
-            fecha = datetime.strptime(fecha_str, "%d/%m/%Y").strftime("%Y-%m-%d")
 
             # Clasificar tipo de activo
             if ticker in ("SPY", "IEV", "ARGT"):
@@ -415,23 +409,46 @@ def procesar_fintual():
             else:
                 tipo_activo = "Stock"
 
-            todas_operaciones.append({
-                "fecha": fecha,
-                "broker": "Fintual",
-                "tipo_operacion": "BUY",
-                "tipo_activo": tipo_activo,
-                "ticker": ticker,
-                "isin": "",
-                "cantidad": round(cantidad, 8),
-                "precio_unitario": round(precio, 4),
-                "moneda_original": "USD",
-                "importe_bruto": round(importe_usd, 2),
-                "importe_eur": round(importe_usd, 2),  # Aproximado, se refina en app.py
-                "tipo_cambio": "",
-                "comisiones_eur": 0,
-                "importe_neto_eur": round(-importe_usd, 2),
-                "notas": "",
-            })
+            if tipo_op == "BUY":
+                cantidad = float(row["Filled Shares"])
+                precio = importe_usd / cantidad if cantidad else 0
+
+                todas_operaciones.append({
+                    "fecha": fecha,
+                    "broker": "Fintual",
+                    "tipo_operacion": "BUY",
+                    "tipo_activo": tipo_activo,
+                    "ticker": ticker,
+                    "isin": "",
+                    "cantidad": round(cantidad, 8),
+                    "precio_unitario": round(precio, 4),
+                    "moneda_original": "USD",
+                    "importe_bruto": round(importe_usd, 2),
+                    "importe_eur": round(importe_usd, 2),
+                    "tipo_cambio": "",
+                    "comisiones_eur": 0,
+                    "importe_neto_eur": round(-importe_usd, 2),
+                    "notas": "",
+                })
+
+            elif tipo_op == "DIVIDEND":
+                todas_operaciones.append({
+                    "fecha": fecha,
+                    "broker": "Fintual",
+                    "tipo_operacion": "DIVIDEND",
+                    "tipo_activo": tipo_activo,
+                    "ticker": ticker,
+                    "isin": "",
+                    "cantidad": 0,
+                    "precio_unitario": 0,
+                    "moneda_original": "USD",
+                    "importe_bruto": round(importe_usd, 2),
+                    "importe_eur": round(importe_usd, 2),
+                    "tipo_cambio": "",
+                    "comisiones_eur": 0,
+                    "importe_neto_eur": round(importe_usd, 2),
+                    "notas": "Dividendo",
+                })
 
 
 def guardar_csv_unificado():
