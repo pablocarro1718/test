@@ -6,8 +6,9 @@ Para ejecutar: python normalizar_inversiones.py
 """
 
 import csv
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+import yfinance as yf
 
 # Directorio de trabajo
 DIR = Path(__file__).parent
@@ -33,6 +34,121 @@ TRADING212_TICKERS = {
 
 # Resultado unificado
 todas_operaciones = []
+
+# Cache de tipos de cambio históricos: {(fecha_str, par): tasa}
+_fx_cache = {}
+
+
+def obtener_tc_historico(fecha_str, par):
+    """
+    Obtiene el tipo de cambio histórico para una fecha y par de monedas.
+    Usa cache para evitar llamadas repetidas.
+    """
+    cache_key = (fecha_str, par)
+    if cache_key in _fx_cache:
+        return _fx_cache[cache_key]
+
+    try:
+        fecha = datetime.strptime(fecha_str, "%Y-%m-%d")
+        fecha_fin = fecha + timedelta(days=7)
+
+        ticker = yf.Ticker(par)
+        hist = ticker.history(
+            start=fecha.strftime("%Y-%m-%d"),
+            end=fecha_fin.strftime("%Y-%m-%d")
+        )
+
+        if not hist.empty:
+            tasa = float(hist['Close'].iloc[0])
+            _fx_cache[cache_key] = tasa
+            return tasa
+        else:
+            print(f"    ⚠️ Sin datos FX para {par} en {fecha_str}")
+            return None
+    except Exception as e:
+        print(f"    ⚠️ Error obteniendo TC {par} para {fecha_str}: {e}")
+        return None
+
+
+def precargar_tasas_fx(fechas_monedas):
+    """
+    Precarga tipos de cambio por rango para minimizar llamadas a yfinance.
+    Recibe un set de tuplas (fecha_str, par_yfinance).
+    """
+    pares_unicos = set(par for _, par in fechas_monedas)
+
+    for par in pares_unicos:
+        fechas_para_par = sorted(set(f for f, p in fechas_monedas if p == par))
+        if not fechas_para_par:
+            continue
+
+        fecha_inicio = datetime.strptime(fechas_para_par[0], "%Y-%m-%d")
+        fecha_fin = datetime.strptime(fechas_para_par[-1], "%Y-%m-%d") + timedelta(days=7)
+
+        try:
+            ticker = yf.Ticker(par)
+            hist = ticker.history(
+                start=fecha_inicio.strftime("%Y-%m-%d"),
+                end=fecha_fin.strftime("%Y-%m-%d")
+            )
+
+            if hist.empty:
+                print(f"    ⚠️ Sin datos para {par}")
+                continue
+
+            # Construir lookup por fecha
+            rates_by_date = {}
+            for idx, row in hist.iterrows():
+                date_key = idx.strftime("%Y-%m-%d")
+                rates_by_date[date_key] = float(row['Close'])
+
+            sorted_available = sorted(rates_by_date.keys())
+
+            for fecha_str in fechas_para_par:
+                # Buscar fecha más cercana >= fecha solicitada
+                found = None
+                for d in sorted_available:
+                    if d >= fecha_str:
+                        found = d
+                        break
+                if found is None and sorted_available:
+                    found = sorted_available[-1]
+
+                if found:
+                    _fx_cache[(fecha_str, par)] = rates_by_date[found]
+
+            print(f"    ✓ {len(fechas_para_par)} tasas precargadas para {par}")
+        except Exception as e:
+            print(f"    ⚠️ Error precargando {par}: {e}")
+
+
+def convertir_a_eur_historico(importe, moneda, fecha_str):
+    """
+    Convierte un importe en moneda original a EUR usando TC histórico.
+    Retorna: (importe_eur, tipo_cambio)
+    """
+    if moneda == "EUR":
+        return importe, ""
+
+    if moneda == "USD":
+        tc = obtener_tc_historico(fecha_str, "EURUSD=X")
+        if tc and tc > 0:
+            return importe / tc, round(tc, 4)
+        print(f"    ⚠️ Usando TC por defecto EUR/USD=1.08 para {fecha_str}")
+        return importe / 1.08, 1.08
+
+    if moneda == "CAD":
+        # CAD → USD → EUR (cross rate, igual que app.py)
+        cad_usd = obtener_tc_historico(fecha_str, "CADUSD=X")
+        eur_usd = obtener_tc_historico(fecha_str, "EURUSD=X")
+        if cad_usd and eur_usd and eur_usd > 0:
+            cad_eur = cad_usd / eur_usd
+            return importe * cad_eur, round(cad_eur, 6)
+        print(f"    ⚠️ Usando TC por defecto CAD/EUR=0.65 para {fecha_str}")
+        return importe * 0.65, 0.65
+
+    print(f"    ⚠️ Moneda no soportada: {moneda}")
+    return importe, ""
 
 
 def parse_numero_es(texto):
@@ -350,16 +466,18 @@ def procesar_ibkr():
                 precio = float(row.get("Precio_orig", 0))
                 moneda = row.get("Moneda_orig", "USD")
                 importe_bruto = float(row.get("Coste_orig", 0))
-                importe_eur = float(row.get("Coste_EUR", 0)) or importe_bruto
-                tc = row.get("TC_EUR", "")
-                comision = float(row.get("Comisión", row.get("Comision", 0)))
+                comision_orig = float(row.get("Comisión", row.get("Comision", 0)))
                 isin = row.get("ISIN", "")
 
-                # Calcular importe neto
+                # Convertir importe y comisión a EUR con TC histórico
+                importe_eur, tc = convertir_a_eur_historico(importe_bruto, moneda, fecha)
+                comision_eur, _ = convertir_a_eur_historico(comision_orig, moneda, fecha)
+
+                # Calcular importe neto en EUR
                 if accion == "BUY":
-                    importe_neto = -abs(importe_eur) - comision
+                    importe_neto = -abs(importe_eur) - comision_eur
                 else:
-                    importe_neto = abs(importe_eur) - comision
+                    importe_neto = abs(importe_eur) - comision_eur
 
                 todas_operaciones.append({
                     "fecha": fecha,
@@ -374,7 +492,7 @@ def procesar_ibkr():
                     "importe_bruto": round(importe_bruto, 2),
                     "importe_eur": round(abs(importe_eur), 2),
                     "tipo_cambio": tc if tc else "",
-                    "comisiones_eur": round(comision, 2),
+                    "comisiones_eur": round(comision_eur, 2),
                     "importe_neto_eur": round(importe_neto, 2),
                     "notas": "",
                 })
@@ -409,6 +527,9 @@ def procesar_fintual():
             else:
                 tipo_activo = "Stock"
 
+            # Convertir USD a EUR con TC histórico
+            importe_eur, tc = convertir_a_eur_historico(importe_usd, "USD", fecha)
+
             if tipo_op == "BUY":
                 cantidad = float(row["Filled Shares"])
                 precio = importe_usd / cantidad if cantidad else 0
@@ -424,10 +545,10 @@ def procesar_fintual():
                     "precio_unitario": round(precio, 4),
                     "moneda_original": "USD",
                     "importe_bruto": round(importe_usd, 2),
-                    "importe_eur": round(importe_usd, 2),
-                    "tipo_cambio": "",
+                    "importe_eur": round(importe_eur, 2),
+                    "tipo_cambio": tc,
                     "comisiones_eur": 0,
-                    "importe_neto_eur": round(-importe_usd, 2),
+                    "importe_neto_eur": round(-importe_eur, 2),
                     "notas": "",
                 })
 
@@ -443,10 +564,10 @@ def procesar_fintual():
                     "precio_unitario": 0,
                     "moneda_original": "USD",
                     "importe_bruto": round(importe_usd, 2),
-                    "importe_eur": round(importe_usd, 2),
-                    "tipo_cambio": "",
+                    "importe_eur": round(importe_eur, 2),
+                    "tipo_cambio": tc,
                     "comisiones_eur": 0,
-                    "importe_neto_eur": round(importe_usd, 2),
+                    "importe_neto_eur": round(importe_eur, 2),
                     "notas": "Dividendo",
                 })
 
@@ -496,22 +617,50 @@ def main():
     print("NORMALIZADOR DE INVERSIONES")
     print("=" * 60)
 
-    print("\n[1/6] Procesando Degiro...")
+    print("\n[1/7] Procesando Degiro...")
     procesar_degiro()
 
-    print("[2/6] Procesando Kraken...")
+    print("[2/7] Procesando Kraken...")
     procesar_kraken()
 
-    print("[3/6] Procesando Trading212 (operaciones)...")
+    print("[3/7] Procesando Trading212 (operaciones)...")
     procesar_trading212_results()
 
-    print("[4/6] Procesando Trading212 (dividendos)...")
+    print("[4/7] Procesando Trading212 (dividendos)...")
     procesar_trading212_dividends()
 
-    print("[5/6] Procesando IBKR...")
+    print("[5/7] Precargando tipos de cambio históricos...")
+    fechas_fx = set()
+
+    # Escanear Fintual (todas USD)
+    fintual_file = DIR / "fintual_transactions_USD.csv"
+    if fintual_file.exists():
+        with open(fintual_file, "r", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                fecha = row["Created At"].strip()
+                fechas_fx.add((fecha, "EURUSD=X"))
+
+    # Escanear IBKR (USD y CAD)
+    ibkr_file = DIR / "ibkr_transactions.csv"
+    if ibkr_file.exists():
+        with open(ibkr_file, "r", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                moneda = row.get("Moneda_orig", "USD")
+                fecha = row["Fecha"]
+                if moneda == "USD":
+                    fechas_fx.add((fecha, "EURUSD=X"))
+                elif moneda == "CAD":
+                    fechas_fx.add((fecha, "CADUSD=X"))
+                    fechas_fx.add((fecha, "EURUSD=X"))
+
+    if fechas_fx:
+        precargar_tasas_fx(fechas_fx)
+        print(f"    {len(_fx_cache)} tasas cargadas en cache")
+
+    print("[6/7] Procesando IBKR...")
     procesar_ibkr()
 
-    print("[6/6] Procesando Fintual...")
+    print("[7/7] Procesando Fintual...")
     procesar_fintual()
 
     print("\nGenerando archivo unificado...")
