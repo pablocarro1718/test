@@ -2,6 +2,12 @@
 .streamlit/secrets.toml
 .env
 *.env.rtf
+.env.local
+*.env.local
+
+# Database - generada por ETL Python, se sube a Turso por separado
+*.db
+portfolio.db
 
 # Archivos de datos generados localmente
 ibkr_raw_response.txt
