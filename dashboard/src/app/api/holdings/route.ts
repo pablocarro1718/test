@@ -24,24 +24,59 @@ export async function GET(request: Request) {
   if (brokerFilter) { conditions.push("o.broker = ?"); args.push(brokerFilter); }
   const whereClause = conditions.length > 0 ? "AND " + conditions.join(" AND ") : "";
 
+  // Filters for the CTE (no symbol join, broker filter applies directly on o.broker)
+  const cteConditions: string[] = [];
+  const cteArgs: string[] = [];
+  if (brokerFilter) { cteConditions.push("o.broker = ?"); cteArgs.push(brokerFilter); }
+  const cteWhere = cteConditions.length > 0 ? "AND " + cteConditions.join(" AND ") : "";
+
+  // Dividends need type filter (symbol join required)
+  const divConditions: string[] = [];
+  const divArgs: string[] = [...cteArgs];
+  if (typeFilter) { divConditions.push("s.asset_type = ?"); divArgs.push(typeFilter); }
+  const divWhere = divConditions.length > 0 ? "AND " + divConditions.join(" AND ") : "";
+
   // --- CONSOLIDATED BY TICKER ---
+  // Use a CTE that first groups by (ticker, broker) and filters out fully-closed broker
+  // positions (net_qty ≈ 0). This prevents sold lots from distorting the cost basis of
+  // re-opened positions (e.g. sold AAPL via Degiro, then re-bought via Fintual).
   const consolidated = (await db.execute({
-    sql: `SELECT
-        o.ticker, s.name, s.asset_type, s.currency,
-        SUM(CASE WHEN o.operation_type = 'BUY' THEN o.quantity ELSE -o.quantity END) as net_qty,
-        SUM(CASE WHEN o.operation_type = 'BUY' THEN o.quantity ELSE 0 END) as total_qty_buy,
-        SUM(CASE WHEN o.operation_type = 'BUY' THEN ABS(o.net_amount_eur) ELSE 0 END) as total_cost,
-        SUM(CASE WHEN o.operation_type = 'BUY' THEN o.commission_eur ELSE 0 END) as total_commission,
-        MIN(CASE WHEN o.operation_type = 'BUY' THEN o.date END) as first_buy,
-        MAX(CASE WHEN o.operation_type = 'BUY' THEN o.date END) as last_buy,
-        SUM(CASE WHEN o.operation_type = 'DIVIDEND' THEN o.net_amount_eur ELSE 0 END) as dividends_received
-      FROM operations o
-      LEFT JOIN symbols s ON o.ticker = s.ticker
-      WHERE o.operation_type IN ('BUY', 'SELL', 'DIVIDEND') ${whereClause}
-      GROUP BY o.ticker
-      HAVING net_qty > 0.001
+    sql: `WITH open_broker_pos AS (
+        SELECT o.ticker, o.broker,
+          SUM(CASE WHEN o.operation_type='BUY' THEN o.quantity ELSE -o.quantity END) AS net_qty,
+          SUM(CASE WHEN o.operation_type='BUY' THEN o.quantity ELSE 0 END) AS qty_buy,
+          SUM(CASE WHEN o.operation_type='BUY' THEN ABS(o.net_amount_eur) ELSE 0 END) AS cost_eur,
+          SUM(CASE WHEN o.operation_type='BUY' THEN o.commission_eur ELSE 0 END) AS commission_eur,
+          MIN(CASE WHEN o.operation_type='BUY' THEN o.date END) AS first_buy,
+          MAX(CASE WHEN o.operation_type='BUY' THEN o.date END) AS last_buy
+        FROM operations o
+        WHERE o.operation_type IN ('BUY', 'SELL') ${cteWhere}
+        GROUP BY o.ticker, o.broker
+        HAVING net_qty > 0.001
+      ),
+      div_agg AS (
+        SELECT o.ticker,
+          SUM(o.net_amount_eur) AS dividends_received
+        FROM operations o
+        LEFT JOIN symbols s ON o.ticker = s.ticker
+        WHERE o.operation_type = 'DIVIDEND' ${divWhere}
+        GROUP BY o.ticker
+      )
+      SELECT p.ticker, s.name, s.asset_type, s.currency,
+        SUM(p.net_qty)        AS net_qty,
+        SUM(p.qty_buy)        AS total_qty_buy,
+        SUM(p.cost_eur)       AS total_cost,
+        SUM(p.commission_eur) AS total_commission,
+        MIN(p.first_buy)      AS first_buy,
+        MAX(p.last_buy)       AS last_buy,
+        COALESCE(d.dividends_received, 0) AS dividends_received
+      FROM open_broker_pos p
+      LEFT JOIN symbols s ON p.ticker = s.ticker
+      LEFT JOIN div_agg d ON p.ticker = d.ticker
+      GROUP BY p.ticker
+      HAVING SUM(p.net_qty) > 0.001
       ORDER BY total_cost DESC`,
-    args,
+    args: [...cteArgs, ...divArgs],
   })).rows as unknown as ConsolidatedRow[];
 
   // --- BROKER-LEVEL BREAKDOWN ---
