@@ -154,13 +154,13 @@ export default function FlowsPage() {
                     width={50}
                   />
                   <Tooltip
-                    formatter={(value: unknown, name: unknown) => {
+                    formatter={(value: unknown, name: string) => {
                       const labels: Record<string, string> = {
                         deposits: "Deposited",
                         withdrawals: "Withdrawn",
                         cumNet: "Net Deployed",
                       };
-                      return [formatCurrency(value as number), labels[name as string] || name];
+                      return [formatCurrency(value as number), labels[name] || name];
                     }}
                     labelFormatter={(label: unknown) => {
                       const [y, m] = String(label).split("-");
