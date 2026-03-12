@@ -23,7 +23,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────── */
 
@@ -73,6 +73,8 @@ interface PricesData {
   >;
 }
 
+type SortKey = "ticker" | "quantity" | "avgCostPerUnit" | "costBasis" | "marketValue" | "unrealizedPnl" | "unrealizedPct" | "weight";
+
 /* ── Constants ──────────────────────────────────────── */
 
 const TYPE_TABS = ["All", "Stock", "ETF", "Crypto"] as const;
@@ -85,6 +87,15 @@ const BROKER_VARIANT: Record<string, string> = {
   Fintual: "bg-amber-100 text-amber-700 border-amber-200",
 };
 
+/* ── Sort indicator ─────────────────────────────────── */
+
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: "asc" | "desc" }) {
+  if (col !== sortKey) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-muted-foreground/40" />;
+  return sortDir === "asc"
+    ? <ArrowUp className="ml-1 inline h-3 w-3 text-foreground" />
+    : <ArrowDown className="ml-1 inline h-3 w-3 text-foreground" />;
+}
+
 /* ── Component ──────────────────────────────────────── */
 
 export default function HoldingsPage() {
@@ -94,6 +105,8 @@ export default function HoldingsPage() {
   const [filterType, setFilterType] = useState<string>("All");
   const [filterBroker, setFilterBroker] = useState<string>("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<SortKey>("marketValue");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     Promise.all([
@@ -142,6 +155,39 @@ export default function HoldingsPage() {
     (s, h) => s + h.marketValue,
     0
   );
+
+  /* ── Sorting ────────────────────────────────── */
+
+  function handleSort(col: SortKey) {
+    if (col === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(col);
+      setSortDir("desc");
+    }
+  }
+
+  const sorted = [...holdingsWithMarket].sort((a, b) => {
+    let av: number | string = 0, bv: number | string = 0;
+    switch (sortKey) {
+      case "ticker": av = a.ticker; bv = b.ticker; break;
+      case "quantity": av = a.quantity; bv = b.quantity; break;
+      case "avgCostPerUnit": av = a.avgCostPerUnit; bv = b.avgCostPerUnit; break;
+      case "costBasis": av = a.costBasis; bv = b.costBasis; break;
+      case "marketValue": av = a.marketValue; bv = b.marketValue; break;
+      case "unrealizedPnl": av = a.unrealizedPnl; bv = b.unrealizedPnl; break;
+      case "unrealizedPct": av = a.unrealizedPct; bv = b.unrealizedPct; break;
+      case "weight":
+        av = totalMarketValue > 0 ? a.marketValue / totalMarketValue : 0;
+        bv = totalMarketValue > 0 ? b.marketValue / totalMarketValue : 0;
+        break;
+    }
+    if (typeof av === "string") {
+      return sortDir === "asc" ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
+    }
+    return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
+  });
+
   const totalUnrealizedPnl = holdingsWithMarket.reduce(
     (s, h) => s + h.unrealizedPnl,
     0
@@ -185,6 +231,16 @@ export default function HoldingsPage() {
       cost: h.costBasis,
       market: h.marketValue,
     }));
+
+  /* ── Commissions chart data ──────────────────── */
+
+  const commissionData = [...holdingsWithMarket]
+    .filter((h) => h.commission > 0)
+    .sort((a, b) => b.commission - a.commission)
+    .slice(0, 10)
+    .map((h) => ({ ticker: h.ticker, commission: h.commission }));
+
+  const thClass = "cursor-pointer select-none hover:text-foreground";
 
   return (
     <div className="space-y-5">
@@ -230,15 +286,14 @@ export default function HoldingsPage() {
           }
         />
         <MetricCard
-          title="Active Positions"
-          value={String(filtered.length)}
-          subtitle={`of ${data.summary.totalPositions} total`}
+          title="Commissions Paid"
+          value={formatCurrency(data.summary.totalCommission)}
+          subtitle={`across ${data.summary.totalPositions} positions`}
         />
       </div>
 
       {/* Filters */}
       <div className="flex items-center gap-3">
-        {/* Type tabs */}
         <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
           {TYPE_TABS.map((tab) => (
             <button
@@ -255,7 +310,6 @@ export default function HoldingsPage() {
             </button>
           ))}
         </div>
-        {/* Broker dropdown */}
         <select
           value={filterBroker}
           onChange={(e) => setFilterBroker(e.target.value)}
@@ -277,18 +331,34 @@ export default function HoldingsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
-                <TableHead>Ticker</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Avg Cost</TableHead>
-                <TableHead className="text-right">Cost Basis</TableHead>
-                <TableHead className="text-right">Mkt Value</TableHead>
-                <TableHead className="text-right">P&L</TableHead>
-                <TableHead className="text-right">P&L %</TableHead>
-                <TableHead className="text-right">Weight</TableHead>
+                <TableHead className={thClass} onClick={() => handleSort("ticker")}>
+                  Ticker <SortIcon col="ticker" sortKey={sortKey} sortDir={sortDir} />
+                </TableHead>
+                <TableHead className={cn(thClass, "text-right")} onClick={() => handleSort("quantity")}>
+                  Qty <SortIcon col="quantity" sortKey={sortKey} sortDir={sortDir} />
+                </TableHead>
+                <TableHead className={cn(thClass, "text-right")} onClick={() => handleSort("avgCostPerUnit")}>
+                  Avg Cost <SortIcon col="avgCostPerUnit" sortKey={sortKey} sortDir={sortDir} />
+                </TableHead>
+                <TableHead className={cn(thClass, "text-right")} onClick={() => handleSort("costBasis")}>
+                  Cost Basis <SortIcon col="costBasis" sortKey={sortKey} sortDir={sortDir} />
+                </TableHead>
+                <TableHead className={cn(thClass, "text-right")} onClick={() => handleSort("marketValue")}>
+                  Mkt Value <SortIcon col="marketValue" sortKey={sortKey} sortDir={sortDir} />
+                </TableHead>
+                <TableHead className={cn(thClass, "text-right")} onClick={() => handleSort("unrealizedPnl")}>
+                  P&L <SortIcon col="unrealizedPnl" sortKey={sortKey} sortDir={sortDir} />
+                </TableHead>
+                <TableHead className={cn(thClass, "text-right")} onClick={() => handleSort("unrealizedPct")}>
+                  P&L % <SortIcon col="unrealizedPct" sortKey={sortKey} sortDir={sortDir} />
+                </TableHead>
+                <TableHead className={cn(thClass, "text-right")} onClick={() => handleSort("weight")}>
+                  Weight <SortIcon col="weight" sortKey={sortKey} sortDir={sortDir} />
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {holdingsWithMarket.map((h) => {
+              {sorted.map((h) => {
                 const isExpanded = expanded.has(h.ticker);
                 const hasBrokers = h.brokers.length > 1;
                 return (
@@ -396,10 +466,7 @@ export default function HoldingsPage() {
                               </span>
                             </TableCell>
                             <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                              {formatNumber(
-                                b.quantity,
-                                b.quantity < 1 ? 6 : 2
-                              )}
+                              {formatNumber(b.quantity, b.quantity < 1 ? 6 : 2)}
                             </TableCell>
                             <TableCell className="text-right font-mono text-xs text-muted-foreground">
                               {formatCurrency(b.avgCost)}
@@ -491,17 +558,61 @@ export default function HoldingsPage() {
                     }
                     wrapperStyle={{ fontSize: "12px" }}
                   />
-                  <Bar
-                    dataKey="cost"
-                    fill="#9ca3af"
-                    radius={[0, 4, 4, 0]}
-                    barSize={12}
+                  <Bar dataKey="cost" fill="#9ca3af" radius={[0, 4, 4, 0]} barSize={12} />
+                  <Bar dataKey="market" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={12} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Commissions by Ticker */}
+      {commissionData.length > 0 && (
+        <Card>
+          <CardContent className="p-5">
+            <p className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Commissions Paid — Top 10
+            </p>
+            <div className="h-[260px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={commissionData}
+                  layout="vertical"
+                  margin={{ left: 10, right: 20 }}
+                >
+                  <XAxis
+                    type="number"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11, fill: "#6b7280" }}
+                    tickFormatter={(v: number) => `€${v.toFixed(0)}`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="ticker"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11, fill: "#1a1a1a", fontFamily: "monospace" }}
+                    width={60}
+                  />
+                  <Tooltip
+                    formatter={(value: unknown) => [
+                      formatCurrency(value as number),
+                      "Commission",
+                    ]}
+                    contentStyle={{
+                      borderRadius: "8px",
+                      border: "1px solid #e0dbd3",
+                      fontSize: "12px",
+                    }}
                   />
                   <Bar
-                    dataKey="market"
-                    fill="#3b82f6"
+                    dataKey="commission"
+                    fill="#f59e0b"
                     radius={[0, 4, 4, 0]}
-                    barSize={12}
+                    barSize={14}
+                    fillOpacity={0.85}
                   />
                 </BarChart>
               </ResponsiveContainer>

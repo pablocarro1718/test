@@ -57,7 +57,6 @@ interface ReturnsData {
   winnersCount: number;
   losersCount: number;
   totalDividends: number;
-  heatmapData: Array<{ year: number; month: number; netFlow: number }>;
   dividendsByQuarter: Array<{ label: string; total: number }>;
 }
 
@@ -74,40 +73,33 @@ interface PricesData {
   >;
 }
 
+interface DashboardData {
+  holdings: Array<{
+    ticker: string;
+    quantity: number;
+    costBasis: number;
+  }>;
+}
+
 /* ── Constants ──────────────────────────────────────── */
 
 const TIME_RANGES = ["1M", "3M", "6M", "1Y", "All"] as const;
 type TimeRange = (typeof TIME_RANGES)[number];
 
 const MONTH_LABELS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
 /* ── Helpers ────────────────────────────────────────── */
 
 function getMonthsBack(range: TimeRange): number {
   switch (range) {
-    case "1M":
-      return 1;
-    case "3M":
-      return 3;
-    case "6M":
-      return 6;
-    case "1Y":
-      return 12;
-    case "All":
-      return 999;
+    case "1M": return 1;
+    case "3M": return 3;
+    case "6M": return 6;
+    case "1Y": return 12;
+    case "All": return 999;
   }
 }
 
@@ -116,6 +108,7 @@ function getMonthsBack(range: TimeRange): number {
 export default function ReturnsPage() {
   const [data, setData] = useState<ReturnsData | null>(null);
   const [prices, setPrices] = useState<PricesData | null>(null);
+  const [dashData, setDashData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<TimeRange>("All");
 
@@ -123,33 +116,34 @@ export default function ReturnsPage() {
     Promise.all([
       fetch("/api/returns").then((r) => r.json()),
       fetch("/api/prices").then((r) => r.json()),
+      fetch("/api/dashboard").then((r) => r.json()),
     ])
-      .then(([returnsData, pricesData]) => {
+      .then(([returnsData, pricesData, dash]) => {
         setData(returnsData);
         setPrices(pricesData);
+        setDashData(dash);
       })
       .finally(() => setLoading(false));
   }, []);
 
-  // XIRR calculation (client-side with live market value)
+  // XIRR calculation: use actual current market value as terminal cash flow
   const xirrResult = useMemo(() => {
-    if (!data) return null;
-    // We need current portfolio value — approximate from dashboard
-    // For now, use the cumulative net as proxy
-    const lastCumNet =
-      data.monthlyFlow.length > 0
-        ? data.monthlyFlow[data.monthlyFlow.length - 1].cumNet
-        : 0;
+    if (!data || !dashData) return null;
+    const marketValue = dashData.holdings.reduce((sum, h) => {
+      const p = prices?.prices[h.ticker];
+      return sum + (p ? p.priceEur * h.quantity : h.costBasis);
+    }, 0);
+    if (marketValue <= 0) return null;
 
     const flows = [
       ...data.xirrFlows.map((f) => ({
         date: new Date(f.date),
         amount: f.amount,
       })),
-      { date: new Date(), amount: lastCumNet },
+      { date: new Date(), amount: marketValue },
     ];
     return xirr(flows);
-  }, [data]);
+  }, [data, prices, dashData]);
 
   if (loading) {
     return (
@@ -168,30 +162,6 @@ export default function ReturnsPage() {
     timeRange === "All"
       ? data.monthlyFlow
       : data.monthlyFlow.slice(-monthsBack);
-
-  /* ── Heatmap ────────────────────────────────── */
-
-  const years = [...new Set(data.heatmapData.map((d) => d.year))].sort();
-  const heatmapMap: Record<string, number> = {};
-  let maxAbs = 0;
-  for (const d of data.heatmapData) {
-    heatmapMap[`${d.year}-${d.month}`] = d.netFlow;
-    if (Math.abs(d.netFlow) > maxAbs) maxAbs = Math.abs(d.netFlow);
-  }
-
-  function getHeatColor(value: number): string {
-    if (maxAbs === 0) return "transparent";
-    const intensity = Math.min(Math.abs(value) / maxAbs, 1);
-    if (value >= 0) {
-      // green
-      const alpha = 0.15 + intensity * 0.6;
-      return `rgba(22, 163, 74, ${alpha})`;
-    } else {
-      // red
-      const alpha = 0.15 + intensity * 0.6;
-      return `rgba(220, 38, 38, ${alpha})`;
-    }
-  }
 
   return (
     <div className="space-y-5">
@@ -313,18 +283,9 @@ export default function ReturnsPage() {
                     labelFormatter={(label: unknown) => {
                       const [y, m] = String(label).split("-");
                       const months = [
-                        "January",
-                        "February",
-                        "March",
-                        "April",
-                        "May",
-                        "June",
-                        "July",
-                        "August",
-                        "September",
-                        "October",
-                        "November",
-                        "December",
+                        "January", "February", "March", "April",
+                        "May", "June", "July", "August",
+                        "September", "October", "November", "December",
                       ];
                       return `${months[parseInt(m) - 1]} ${y}`;
                     }}
@@ -357,76 +318,6 @@ export default function ReturnsPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Monthly Returns Heatmap */}
-      {years.length > 0 && (
-        <Card>
-          <CardContent className="p-5">
-            <p className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Monthly Returns Heatmap
-            </p>
-            <div
-              className="grid gap-1"
-              style={{
-                gridTemplateColumns: `auto repeat(12, 1fr)`,
-              }}
-            >
-              {/* Month headers */}
-              <div />
-              {MONTH_LABELS.map((m) => (
-                <div
-                  key={m}
-                  className="text-center text-[10px] font-medium text-muted-foreground pb-1"
-                >
-                  {m}
-                </div>
-              ))}
-              {/* Rows by year */}
-              {years.map((year) => (
-                <>
-                  <div
-                    key={`y-${year}`}
-                    className="text-xs font-medium text-muted-foreground pr-2 flex items-center"
-                  >
-                    {year}
-                  </div>
-                  {Array.from({ length: 12 }, (_, i) => {
-                    const month = i + 1;
-                    const key = `${year}-${month}`;
-                    const value = heatmapMap[key];
-                    const hasData = value !== undefined;
-                    return (
-                      <div
-                        key={key}
-                        className={cn(
-                          "aspect-square rounded-sm flex items-center justify-center text-[9px] font-medium",
-                          hasData
-                            ? "text-foreground"
-                            : "bg-muted/30 text-transparent"
-                        )}
-                        style={{
-                          backgroundColor: hasData
-                            ? getHeatColor(value)
-                            : undefined,
-                        }}
-                        title={
-                          hasData
-                            ? `${MONTH_LABELS[i]} ${year}: ${formatCurrency(value)}`
-                            : undefined
-                        }
-                      >
-                        {hasData
-                          ? `${value >= 0 ? "+" : ""}${(value / 1000).toFixed(0)}k`
-                          : ""}
-                      </div>
-                    );
-                  })}
-                </>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Closed Positions */}
       {data.closedTrades.length > 0 && (

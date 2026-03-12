@@ -78,7 +78,7 @@ export async function GET() {
     `SELECT date, flow_type, amount_eur FROM cash_flows ORDER BY date`
   )).rows as unknown as CfRow[]).map((cf) => ({
     date: cf.date,
-    amount: cf.flow_type === "deposit" ? -cf.amount_eur : cf.amount_eur,
+    amount: -cf.amount_eur, // deposits positive in DB → negate = outflow; withdrawals negative in DB → negate = inflow
   }));
 
   // --- ALLOCATION BY ASSET TYPE ---

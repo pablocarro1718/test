@@ -9,11 +9,9 @@ import { cn } from "@/lib/utils";
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
+  PieChart,
+  Pie,
   Cell,
-  XAxis,
-  YAxis,
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
@@ -79,6 +77,26 @@ const ASSET_COLORS: Record<string, string> = {
   Unknown: "#9ca3af",
 };
 
+const PIE_COLORS = [
+  "#3b82f6", "#8b5cf6", "#f59e0b", "#10b981", "#ef4444",
+  "#06b6d4", "#f97316", "#84cc16", "#ec4899", "#6366f1",
+  "#14b8a6", "#a855f7", "#f43f5e", "#22c55e", "#0ea5e9",
+];
+
+/* ── Custom pie tooltip ─────────────────────────────── */
+
+function PieTooltipContent({ active, payload }: { active?: boolean; payload?: Array<{ name: string; value: number; payload: { pct: number } }> }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0];
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-sm">
+      <p className="font-mono font-semibold">{d.name}</p>
+      <p className="text-muted-foreground">{formatCurrency(d.value)}</p>
+      <p className="font-medium">{d.payload.pct.toFixed(1)}%</p>
+    </div>
+  );
+}
+
 /* ── Component ──────────────────────────────────────── */
 
 export default function DashboardPage() {
@@ -140,12 +158,8 @@ export default function DashboardPage() {
     cumulative += m.netChange;
     return { month: m.month, value: cumulative };
   });
-  // Add current point with live market value
   if (sparkData.length > 0) {
-    sparkData.push({
-      month: "now",
-      value: marketValue,
-    });
+    sparkData.push({ month: "now", value: marketValue });
   }
 
   // Today's movers: sort holdings by changePercent
@@ -164,10 +178,10 @@ export default function DashboardPage() {
 
   const gainers = [...movers]
     .sort((a, b) => b.changePercent - a.changePercent)
-    .slice(0, 3);
+    .slice(0, 6);
   const losers = [...movers]
     .sort((a, b) => a.changePercent - b.changePercent)
-    .slice(0, 3)
+    .slice(0, 6)
     .filter((m) => m.changePercent < 0);
 
   // Allocation: compute by market value
@@ -190,17 +204,14 @@ export default function DashboardPage() {
     }))
     .sort((a, b) => b.value - a.value);
 
-  // Top 5 by market weight
-  const top5 = data.holdings
+  // Pie chart data: all tickers by market value
+  const pieData = data.holdings
     .map((h) => {
       const p = prices?.prices[h.ticker];
       const val = p ? p.priceEur * h.quantity : h.costBasis;
-      return { ticker: h.ticker, name: h.name, marketValue: val };
+      return { name: h.ticker, value: val, pct: totalAllocation > 0 ? (val / totalAllocation) * 100 : 0 };
     })
-    .sort((a, b) => b.marketValue - a.marketValue)
-    .slice(0, 5);
-
-  const top5Max = top5[0]?.marketValue || 1;
+    .sort((a, b) => b.value - a.value);
 
   // Is weekend?
   const dayOfWeek = new Date().getDay();
@@ -410,11 +421,11 @@ export default function DashboardPage() {
         {/* Allocation Snapshot */}
         <Card>
           <CardContent className="p-5">
-            <p className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               Allocation
             </p>
             {/* Stacked bar */}
-            <div className="mb-3 flex h-3 overflow-hidden rounded-full">
+            <div className="mb-2 flex h-3 overflow-hidden rounded-full">
               {allocationEntries.map((a) => (
                 <div
                   key={a.type}
@@ -444,136 +455,37 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-            {/* Top 5 */}
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Top 5 by Weight
-            </p>
-            <div className="space-y-2">
-              {top5.map((h) => {
-                const pct =
-                  totalAllocation > 0
-                    ? (h.marketValue / totalAllocation) * 100
-                    : 0;
-                return (
-                  <div key={h.ticker} className="space-y-0.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono font-medium">
-                          {h.ticker}
-                        </span>
-                        <span className="text-muted-foreground truncate max-w-[100px]">
-                          {h.name}
-                        </span>
-                      </div>
-                      <span className="font-medium">
-                        {formatCurrency(h.marketValue, 0)} · {pct.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-chart-1 transition-all"
-                        style={{
-                          width: `${(h.marketValue / top5Max) * 100}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            {/* Pie chart */}
+            {pieData.length > 0 && (
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={85}
+                      paddingAngle={1}
+                      dataKey="value"
+                      isAnimationActive={false}
+                    >
+                      {pieData.map((_, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={PIE_COLORS[index % PIE_COLORS.length]}
+                          fillOpacity={0.9}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<PieTooltipContent />} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
-
-      {/* ── Monthly Pulse ────────────────────────── */}
-      <Card>
-        <CardContent className="p-5">
-          <p className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Monthly Pulse — Net Cash Flow
-          </p>
-          {data.monthlyPulse.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No data yet</p>
-          ) : (
-            <div className="h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.monthlyPulse} barCategoryGap="20%">
-                  <XAxis
-                    dataKey="month"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11, fill: "#6b7280" }}
-                    tickFormatter={(v: string) => {
-                      const [, m] = v.split("-");
-                      const months = [
-                        "Jan",
-                        "Feb",
-                        "Mar",
-                        "Apr",
-                        "May",
-                        "Jun",
-                        "Jul",
-                        "Aug",
-                        "Sep",
-                        "Oct",
-                        "Nov",
-                        "Dec",
-                      ];
-                      return months[parseInt(m) - 1] || v;
-                    }}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11, fill: "#6b7280" }}
-                    tickFormatter={(v: number) =>
-                      `${v >= 0 ? "" : "-"}€${Math.abs(v / 1000).toFixed(0)}k`
-                    }
-                    width={50}
-                  />
-                  <Tooltip
-                    formatter={(value: unknown) => [
-                      formatCurrency(value as number),
-                      "Net Flow",
-                    ]}
-                    labelFormatter={(label: unknown) => {
-                      const [y, m] = String(label).split("-");
-                      const months = [
-                        "January",
-                        "February",
-                        "March",
-                        "April",
-                        "May",
-                        "June",
-                        "July",
-                        "August",
-                        "September",
-                        "October",
-                        "November",
-                        "December",
-                      ];
-                      return `${months[parseInt(m) - 1]} ${y}`;
-                    }}
-                    contentStyle={{
-                      borderRadius: "8px",
-                      border: "1px solid #e0dbd3",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <Bar dataKey="netChange" radius={[4, 4, 0, 0]}>
-                    {data.monthlyPulse.map((entry, idx) => (
-                      <Cell
-                        key={idx}
-                        fill={entry.netChange >= 0 ? "#16a34a" : "#dc2626"}
-                        fillOpacity={0.85}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
