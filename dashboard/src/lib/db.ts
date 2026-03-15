@@ -1,3 +1,4 @@
+// Use /web import to avoid @libsql/darwin-arm64 native module (iCloud quarantine issue on macOS)
 import { createClient, Client } from "@libsql/client/web";
 
 let db: Client | null = null;
