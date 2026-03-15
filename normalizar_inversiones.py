@@ -318,10 +318,13 @@ def procesar_kraken():
             precio_eur = float(row["price_eur"])
 
             # Todas las operaciones de Kraken son en EUR
+            # Estimar comisión Kraken: 0.26% taker fee (datos manuales sin fee)
+            comision_estimada = round(importe_eur * 0.0026, 2)
+
             if side == "BUY":
-                importe_neto = -importe_eur  # Sale dinero
+                importe_neto = -importe_eur - comision_estimada
             else:
-                importe_neto = importe_eur  # Entra dinero
+                importe_neto = importe_eur - comision_estimada
 
             todas_operaciones.append({
                 "fecha": fecha,
@@ -336,10 +339,75 @@ def procesar_kraken():
                 "importe_bruto": round(importe_eur, 2),
                 "importe_eur": round(importe_eur, 2),
                 "tipo_cambio": "",
-                "comisiones_eur": 0,
+                "comisiones_eur": comision_estimada,
                 "importe_neto_eur": round(importe_neto, 2),
-                "notas": row.get("nota", ""),
+                "notas": row.get("nota", "") + " (comisión estimada 0.26%)" if comision_estimada > 0 else row.get("nota", ""),
             })
+
+
+def _cargar_t212_fechas_missing():
+    """
+    Carga t212_buy_operations_missing_date.csv y devuelve un dict:
+    {(ticker, round(qty, 4)): [date_str, ...]}  (listas de fechas ordenadas)
+    Si el archivo no existe, devuelve dict vacío.
+    """
+    from collections import defaultdict
+    archivo = DIR / "t212_buy_operations_missing_date.csv"
+    if not archivo.exists():
+        return {}
+
+    lookup = defaultdict(list)
+    with open(archivo, "r", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            ticker = TRADING212_TICKERS.get(row["code"], row["code"].replace("_US_EQ", ""))
+            qty = round(float(row["quantity"]), 4)
+            date_str = row["time"].split(" ")[0]
+            key = (ticker, qty)
+            if date_str not in lookup[key]:
+                lookup[key].append(date_str)
+    for key in lookup:
+        lookup[key].sort()
+    return dict(lookup)
+
+
+# Cache de fechas T212 (cargado una vez)
+_t212_fechas_cache = None
+
+
+def _get_t212_fecha(ticker, cantidad, precio_compra_usd):
+    """
+    Busca la fecha de compra para una operación T212 usando el archivo de missing dates.
+    Retorna la fecha encontrada o "PENDIENTE".
+    """
+    global _t212_fechas_cache
+    if _t212_fechas_cache is None:
+        _t212_fechas_cache = _cargar_t212_fechas_missing()
+
+    key = (ticker, round(cantidad, 4))
+    candidates = _t212_fechas_cache.get(key, [])
+
+    if not candidates:
+        return "PENDIENTE"
+    if len(candidates) == 1:
+        return candidates[0]
+
+    # Múltiples candidatos: elegir la fecha cuyo precio de mercado sea más cercano
+    best_date = candidates[0]
+    best_diff = float("inf")
+    try:
+        import yfinance as yf
+        for date_str in candidates:
+            end = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=5)).strftime("%Y-%m-%d")
+            hist = yf.Ticker(ticker).history(start=date_str, end=end)
+            if not hist.empty:
+                market_price = float(hist["Close"].iloc[0])
+                diff = abs(market_price - precio_compra_usd)
+                if diff < best_diff:
+                    best_diff = diff
+                    best_date = date_str
+    except Exception:
+        pass
+    return best_date
 
 
 def procesar_trading212_results():
@@ -373,9 +441,13 @@ def procesar_trading212_results():
             importe_compra_eur = cantidad * precio_compra_eur
             importe_venta_eur = cantidad * precio_venta_eur
 
-            # Registrar COMPRA (fecha desconocida por ahora)
+            # Fecha de compra: buscar en archivo de missing dates, si no → PENDIENTE
+            fecha_compra = _get_t212_fecha(ticker, cantidad, precio_compra_usd)
+            notas_compra = "" if fecha_compra != "PENDIENTE" else "Fecha de compra pendiente de confirmar"
+
+            # Registrar COMPRA
             todas_operaciones.append({
-                "fecha": "PENDIENTE",  # Se actualizará cuando tengamos las fechas
+                "fecha": fecha_compra,
                 "broker": "Trading212",
                 "tipo_operacion": "BUY",
                 "tipo_activo": "Stock",
@@ -389,7 +461,7 @@ def procesar_trading212_results():
                 "tipo_cambio": round(tc_compra, 4),
                 "comisiones_eur": 0,
                 "importe_neto_eur": round(-importe_compra_eur, 2),
-                "notas": "Fecha de compra pendiente de confirmar",
+                "notas": notas_compra,
             })
 
             # Registrar VENTA
@@ -423,8 +495,11 @@ def procesar_trading212_dividends():
             code = row["code"]
             ticker = TRADING212_TICKERS.get(code, code.replace("_US_EQ", ""))
             cantidad_acciones = float(row["quantity"])
-            dividendo = float(row["dividend"])
+            dividendo_usd = float(row["dividend"])
             fecha = row["timePaid"].split("T")[0]
+
+            # Convertir USD a EUR con TC histórico
+            importe_eur, tc = convertir_a_eur_historico(dividendo_usd, "USD", fecha)
 
             todas_operaciones.append({
                 "fecha": fecha,
@@ -436,11 +511,11 @@ def procesar_trading212_dividends():
                 "cantidad": round(cantidad_acciones, 6),
                 "precio_unitario": 0,
                 "moneda_original": "USD",
-                "importe_bruto": round(dividendo, 2),
-                "importe_eur": round(dividendo, 2),  # Aproximado, T212 ya lo da neto
-                "tipo_cambio": "",
+                "importe_bruto": round(dividendo_usd, 2),
+                "importe_eur": round(importe_eur, 2),
+                "tipo_cambio": tc if tc else "",
                 "comisiones_eur": 0,
-                "importe_neto_eur": round(dividendo, 2),
+                "importe_neto_eur": round(importe_eur, 2),
                 "notas": "Dividendo",
             })
 
@@ -631,6 +706,14 @@ def main():
 
     print("[5/7] Precargando tipos de cambio históricos...")
     fechas_fx = set()
+
+    # Escanear T212 dividendos (USD → EUR)
+    t212_div_file = DIR / "trading212_dividend.csv"
+    if t212_div_file.exists():
+        with open(t212_div_file, "r", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                fecha = row["timePaid"].split("T")[0]
+                fechas_fx.add((fecha, "EURUSD=X"))
 
     # Escanear Fintual (todas USD)
     fintual_file = DIR / "fintual_transactions_USD.csv"

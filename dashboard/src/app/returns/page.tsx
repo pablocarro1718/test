@@ -3,16 +3,9 @@
 import { useEffect, useState, useMemo } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatPercent } from "@/lib/format";
+import { DataTable, ColumnDef } from "@/components/data-table";
 import { xirr } from "@/lib/xirr";
 import { cn } from "@/lib/utils";
 import {
@@ -320,79 +313,106 @@ export default function ReturnsPage() {
       </Card>
 
       {/* Closed Positions */}
-      {data.closedTrades.length > 0 && (
-        <Card>
-          <CardContent className="p-0">
-            <div className="p-5 pb-0">
-              <p className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Closed Positions
-              </p>
-            </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Ticker</TableHead>
-                  <TableHead>Buy Date</TableHead>
-                  <TableHead>Sell Date</TableHead>
-                  <TableHead className="text-right">Cost</TableHead>
-                  <TableHead className="text-right">Proceeds</TableHead>
-                  <TableHead className="text-right">P&L</TableHead>
-                  <TableHead className="text-right">P&L %</TableHead>
-                  <TableHead className="text-right">Period</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.closedTrades.map((t) => (
-                  <TableRow key={`${t.ticker}-${t.lastSell}`}>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono font-medium">
-                          {t.ticker}
-                        </span>
-                        {!t.isFullyClosed && (
-                          <Badge
-                            variant="outline"
-                            className="text-[9px] font-normal"
-                          >
-                            partial
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{t.firstBuy}</TableCell>
-                    <TableCell className="text-sm">{t.lastSell}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {formatCurrency(t.costOfSold)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {formatCurrency(t.proceeds)}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right font-mono text-sm font-medium",
-                        t.pnl >= 0 ? "text-positive" : "text-negative"
-                      )}
-                    >
-                      {formatCurrency(t.pnl)}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right font-mono text-sm",
-                        t.pnlPercent >= 0 ? "text-positive" : "text-negative"
-                      )}
-                    >
-                      {formatPercent(t.pnlPercent)}
-                    </TableCell>
-                    <TableCell className="text-right text-sm text-muted-foreground">
-                      {t.holdingPeriod}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+      {data.closedTrades.length > 0 && (() => {
+        type ClosedTrade = typeof data.closedTrades[0];
+        const closedCols: ColumnDef<ClosedTrade>[] = [
+          {
+            key: "ticker",
+            label: "Ticker",
+            sortable: true,
+            getStringValue: (r) => r.ticker,
+            render: (r) => (
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono font-medium">{r.ticker}</span>
+                {!r.isFullyClosed && <Badge variant="outline" className="text-[9px] font-normal">partial</Badge>}
+              </div>
+            ),
+          },
+          {
+            key: "firstBuy",
+            label: "Buy Date",
+            sortable: true,
+            getStringValue: (r) => r.firstBuy,
+            render: (r) => <span className="tabular-nums text-sm">{r.firstBuy}</span>,
+          },
+          {
+            key: "lastSell",
+            label: "Sell Date",
+            sortable: true,
+            getStringValue: (r) => r.lastSell,
+            render: (r) => <span className="tabular-nums text-sm">{r.lastSell}</span>,
+          },
+          {
+            key: "pnl",
+            label: "P&L",
+            sortable: true,
+            align: "right",
+            footer: "sum",
+            getValue: (r) => r.pnl,
+            render: (r) => (
+              <span className={cn("font-mono text-sm font-medium", r.pnl >= 0 ? "text-positive" : "text-negative")}>
+                {formatCurrency(r.pnl)}
+              </span>
+            ),
+          },
+          {
+            key: "pnlPercent",
+            label: "P&L %",
+            sortable: true,
+            align: "right",
+            footer: "avg",
+            getValue: (r) => r.pnlPercent,
+            render: (r) => (
+              <span className={cn("font-mono text-sm", r.pnlPercent >= 0 ? "text-positive" : "text-negative")}>
+                {formatPercent(r.pnlPercent)}
+              </span>
+            ),
+          },
+          // Secondary
+          {
+            key: "costOfSold",
+            label: "Cost",
+            secondary: true,
+            sortable: true,
+            align: "right",
+            footer: "sum",
+            getValue: (r) => r.costOfSold,
+            render: (r) => <span className="font-mono text-sm">{formatCurrency(r.costOfSold)}</span>,
+          },
+          {
+            key: "proceeds",
+            label: "Proceeds",
+            secondary: true,
+            sortable: true,
+            align: "right",
+            footer: "sum",
+            getValue: (r) => r.proceeds,
+            render: (r) => <span className="font-mono text-sm">{formatCurrency(r.proceeds)}</span>,
+          },
+          {
+            key: "holdingPeriod",
+            label: "Period",
+            secondary: true,
+            sortable: false,
+            align: "right",
+            render: (r) => <span className="text-sm text-muted-foreground">{r.holdingPeriod}</span>,
+          },
+        ];
+        return (
+          <div>
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Closed Positions
+            </p>
+            <DataTable<ClosedTrade>
+              data={data.closedTrades}
+              columns={closedCols}
+              defaultSort={{ key: "lastSell", dir: "desc" }}
+              storageKey="returns-closed"
+              getRowKey={(r, i) => `${r.ticker}-${r.lastSell}-${i}`}
+            />
+          </div>
+        );
+      })()}
 
       {/* Dividends by Quarter */}
       {data.dividendsByQuarter.length > 0 && (

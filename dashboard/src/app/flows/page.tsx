@@ -3,16 +3,9 @@
 import { useEffect, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { DataTable, ColumnDef } from "@/components/data-table";
 import {
   ComposedChart,
   Bar,
@@ -208,63 +201,67 @@ export default function FlowsPage() {
       )}
 
       {/* Detail table */}
-      {data.detail.length > 0 && (
-        <Card>
-          <CardContent className="p-0">
-            <div className="p-5 pb-0">
-              <p className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Transaction History
-              </p>
-            </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Broker</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Amount (EUR)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.detail.map((row, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="text-sm">{row.date}</TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
-                          BROKER_COLORS[row.broker] || "bg-gray-100 text-gray-700 border-gray-200"
-                        )}
-                      >
-                        {row.broker}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          "text-xs font-medium",
-                          row.flow_type === "deposit" ? "text-positive" : "text-negative"
-                        )}
-                      >
-                        {row.flow_type === "deposit" ? "Deposit" : "Withdrawal"}
-                      </span>
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right font-mono text-sm",
-                        row.flow_type === "deposit" ? "text-positive" : "text-negative"
-                      )}
-                    >
-                      {row.flow_type === "deposit" ? "+" : "-"}
-                      {formatCurrency(Math.abs(row.amount_eur))}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+      {data.detail.length > 0 && (() => {
+        type FlowRow = typeof data.detail[0];
+        const flowCols: ColumnDef<FlowRow>[] = [
+          {
+            key: "date",
+            label: "Date",
+            sortable: true,
+            getStringValue: (r) => r.date,
+            render: (r) => <span className="tabular-nums text-sm">{r.date}</span>,
+          },
+          {
+            key: "broker",
+            label: "Broker",
+            sortable: true,
+            getStringValue: (r) => r.broker,
+            render: (r) => (
+              <span className={cn("inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium", BROKER_COLORS[r.broker] || "bg-gray-100 text-gray-700 border-gray-200")}>
+                {r.broker}
+              </span>
+            ),
+          },
+          {
+            key: "flow_type",
+            label: "Type",
+            sortable: true,
+            getStringValue: (r) => r.flow_type,
+            render: (r) => (
+              <span className={cn("text-xs font-medium", r.flow_type === "deposit" ? "text-positive" : "text-negative")}>
+                {r.flow_type === "deposit" ? "Deposit" : "Withdrawal"}
+              </span>
+            ),
+          },
+          {
+            key: "amount_eur",
+            label: "Amount (EUR)",
+            sortable: true,
+            align: "right",
+            footer: "sum",
+            getValue: (r) => r.amount_eur,
+            render: (r) => (
+              <span className={cn("font-mono text-sm", r.flow_type === "deposit" ? "text-positive" : "text-negative")}>
+                {r.flow_type === "deposit" ? "+" : "-"}{formatCurrency(Math.abs(r.amount_eur))}
+              </span>
+            ),
+          },
+        ];
+        return (
+          <div>
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Transaction History
+            </p>
+            <DataTable<FlowRow>
+              data={data.detail}
+              columns={flowCols}
+              defaultSort={{ key: "date", dir: "desc" }}
+              storageKey="flows"
+              getRowKey={(r, i) => `${r.date}-${r.broker}-${i}`}
+            />
+          </div>
+        );
+      })()}
     </div>
   );
 }

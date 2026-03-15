@@ -12,6 +12,12 @@ export async function GET(request: Request) {
   const page = parseInt(searchParams.get("page") || "1");
   const offset = (page - 1) * limit;
 
+  // Sort — whitelist to prevent injection
+  const ALLOWED_SORT = ["date","broker","type","ticker","quantity","amount_eur","commission_eur","net_amount_eur"];
+  const sortByRaw = searchParams.get("sortBy") ?? "date";
+  const sortBy = ALLOWED_SORT.includes(sortByRaw) ? sortByRaw : "date";
+  const sortDir = searchParams.get("sortDir") === "asc" ? "ASC" : "DESC";
+
   const db = getDb();
 
   // Build WHERE clauses
@@ -63,7 +69,7 @@ export async function GET(request: Request) {
              currency as currency_original, amount as price_original,
              COALESCE(fx_rate, 1.0) as fx_rate
       FROM cash_flows WHERE ${cfWhere}
-    ) ORDER BY date DESC LIMIT ? OFFSET ?`;
+    ) ORDER BY ${sortBy} ${sortDir} LIMIT ? OFFSET ?`;
     dataArgs = [...opArgs, ...cfArgs, limit, offset];
   } else if (includeOperations) {
     countSql = `SELECT COUNT(*) as total FROM operations WHERE ${opWhere}`;
@@ -72,7 +78,7 @@ export async function GET(request: Request) {
                       amount_eur, commission_eur, net_amount_eur,
                       currency_original, price_original, fx_rate
                FROM operations WHERE ${opWhere}
-               ORDER BY date DESC LIMIT ? OFFSET ?`;
+               ORDER BY ${sortBy} ${sortDir} LIMIT ? OFFSET ?`;
     dataArgs = [...opArgs, limit, offset];
   } else {
     countSql = `SELECT COUNT(*) as total FROM cash_flows WHERE ${cfWhere}`;
@@ -82,7 +88,7 @@ export async function GET(request: Request) {
                       currency as currency_original, amount as price_original,
                       COALESCE(fx_rate, 1.0) as fx_rate
                FROM cash_flows WHERE ${cfWhere}
-               ORDER BY date DESC LIMIT ? OFFSET ?`;
+               ORDER BY ${sortBy} ${sortDir} LIMIT ? OFFSET ?`;
     dataArgs = [...cfArgs, limit, offset];
   }
 
