@@ -8,6 +8,15 @@ import { DataTable, ColumnDef } from "@/components/data-table";
 
 /* ── Types ─────────────────────────────────────────── */
 
+interface Fill {
+  quantity: number;
+  amount_eur: number;
+  commission_eur: number;
+  net_amount_eur: number;
+  price_original: number;
+  fx_rate: number;
+}
+
 interface ActivityItem {
   date: string;
   broker: string;
@@ -20,6 +29,8 @@ interface ActivityItem {
   currency_original: string;
   price_original: number;
   fx_rate: number;
+  fill_count: number;
+  fills: Fill[];
 }
 
 interface ActivityData {
@@ -97,7 +108,16 @@ const COLUMNS: ColumnDef<ActivityItem>[] = [
     label: "Ticker",
     sortable: true,
     getStringValue: (r) => r.ticker,
-    render: (r) => <span className="font-mono text-sm font-medium">{r.ticker || <span className="text-muted-foreground">—</span>}</span>,
+    render: (r) => (
+      <span className="flex items-center gap-1.5">
+        <span className="font-mono text-sm font-medium">{r.ticker || <span className="text-muted-foreground">—</span>}</span>
+        {r.fill_count > 1 && (
+          <span className="text-[10px] text-muted-foreground bg-muted rounded px-1 py-0.5 leading-none">
+            {r.fill_count} fills
+          </span>
+        )}
+      </span>
+    ),
   },
   {
     key: "net_amount_eur",
@@ -301,6 +321,33 @@ export default function ActivityPage() {
         pageSize={PAGE_SIZE}
         onPageChange={setPage}
         filterSlot={filterSlot}
+        expandRow={(r) => {
+          if (r.fill_count <= 1) return null;
+          return (
+            <table className="w-full text-xs border-separate border-spacing-0">
+              <thead>
+                <tr className="text-muted-foreground">
+                  <th className="text-left font-medium pb-1 pr-4">Qty</th>
+                  <th className="text-right font-medium pb-1 pr-4">Price (orig)</th>
+                  <th className="text-right font-medium pb-1 pr-4">Amount EUR</th>
+                  <th className="text-right font-medium pb-1 pr-4">Commission EUR</th>
+                  <th className="text-right font-medium pb-1">FX Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {r.fills.map((f, i) => (
+                  <tr key={i} className="tabular-nums">
+                    <td className="pr-4 py-0.5">{formatNumber(f.quantity, f.quantity < 1 ? 6 : 4)}</td>
+                    <td className="text-right pr-4 py-0.5">{formatNumber(f.price_original, 4)}</td>
+                    <td className="text-right pr-4 py-0.5">{formatCurrency(f.amount_eur)}</td>
+                    <td className="text-right pr-4 py-0.5">{f.commission_eur > 0 ? formatCurrency(f.commission_eur) : "—"}</td>
+                    <td className="text-right py-0.5">{f.fx_rate !== 1 ? formatNumber(f.fx_rate, 4) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          );
+        }}
       />
     </div>
   );

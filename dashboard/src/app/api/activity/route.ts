@@ -46,6 +46,38 @@ export async function GET(request: Request) {
   const includeCashFlows = !hasTicker && !isTradeType;
   const includeOperations = !isCashType;
 
+  // Grouped operations SELECT — aggregates partial fills per (date, broker, type, ticker)
+  const groupedOpSelect = `
+    SELECT
+      date, broker, operation_type as type, ticker,
+      SUM(quantity) as quantity,
+      SUM(amount_eur) as amount_eur,
+      SUM(commission_eur) as commission_eur,
+      SUM(net_amount_eur) as net_amount_eur,
+      currency_original,
+      SUM(price_original * quantity) / NULLIF(SUM(quantity), 0) as price_original,
+      AVG(COALESCE(fx_rate, 1.0)) as fx_rate,
+      COUNT(*) as fill_count,
+      json_group_array(json_object(
+        'quantity', quantity,
+        'amount_eur', amount_eur,
+        'commission_eur', commission_eur,
+        'net_amount_eur', net_amount_eur,
+        'price_original', price_original,
+        'fx_rate', COALESCE(fx_rate, 1.0)
+      )) as fills_json
+    FROM operations WHERE ${opWhere}
+    GROUP BY date, broker, operation_type, ticker`;
+
+  const cashSelect = `
+    SELECT
+      date, broker, UPPER(flow_type) as type, '' as ticker,
+      0 as quantity, amount_eur, 0 as commission_eur, amount_eur as net_amount_eur,
+      currency as currency_original, amount as price_original,
+      COALESCE(fx_rate, 1.0) as fx_rate,
+      1 as fill_count, '[]' as fills_json
+    FROM cash_flows WHERE ${cfWhere}`;
+
   let countSql: string;
   let dataSql: string;
   let countArgs: string[];
@@ -53,42 +85,28 @@ export async function GET(request: Request) {
 
   if (includeOperations && includeCashFlows) {
     countSql = `SELECT COUNT(*) as total FROM (
-      SELECT 1 FROM operations WHERE ${opWhere}
+      SELECT date FROM operations WHERE ${opWhere} GROUP BY date, broker, operation_type, ticker
       UNION ALL
-      SELECT 1 FROM cash_flows WHERE ${cfWhere}
+      SELECT date FROM cash_flows WHERE ${cfWhere}
     )`;
     countArgs = [...opArgs, ...cfArgs];
     dataSql = `SELECT * FROM (
-      SELECT date, broker, operation_type as type, ticker, quantity,
-             amount_eur, commission_eur, net_amount_eur,
-             currency_original, price_original, fx_rate
-      FROM operations WHERE ${opWhere}
+      ${groupedOpSelect}
       UNION ALL
-      SELECT date, broker, UPPER(flow_type) as type, '' as ticker, 0 as quantity,
-             amount_eur, 0 as commission_eur, amount_eur as net_amount_eur,
-             currency as currency_original, amount as price_original,
-             COALESCE(fx_rate, 1.0) as fx_rate
-      FROM cash_flows WHERE ${cfWhere}
+      ${cashSelect}
     ) ORDER BY ${sortBy} ${sortDir} LIMIT ? OFFSET ?`;
     dataArgs = [...opArgs, ...cfArgs, limit, offset];
   } else if (includeOperations) {
-    countSql = `SELECT COUNT(*) as total FROM operations WHERE ${opWhere}`;
+    countSql = `SELECT COUNT(*) as total FROM (
+      SELECT date FROM operations WHERE ${opWhere} GROUP BY date, broker, operation_type, ticker
+    )`;
     countArgs = opArgs;
-    dataSql = `SELECT date, broker, operation_type as type, ticker, quantity,
-                      amount_eur, commission_eur, net_amount_eur,
-                      currency_original, price_original, fx_rate
-               FROM operations WHERE ${opWhere}
-               ORDER BY ${sortBy} ${sortDir} LIMIT ? OFFSET ?`;
+    dataSql = `SELECT * FROM (${groupedOpSelect}) ORDER BY ${sortBy} ${sortDir} LIMIT ? OFFSET ?`;
     dataArgs = [...opArgs, limit, offset];
   } else {
     countSql = `SELECT COUNT(*) as total FROM cash_flows WHERE ${cfWhere}`;
     countArgs = cfArgs;
-    dataSql = `SELECT date, broker, UPPER(flow_type) as type, '' as ticker, 0 as quantity,
-                      amount_eur, 0 as commission_eur, amount_eur as net_amount_eur,
-                      currency as currency_original, amount as price_original,
-                      COALESCE(fx_rate, 1.0) as fx_rate
-               FROM cash_flows WHERE ${cfWhere}
-               ORDER BY ${sortBy} ${sortDir} LIMIT ? OFFSET ?`;
+    dataSql = `SELECT * FROM (${cashSelect}) ORDER BY ${sortBy} ${sortDir} LIMIT ? OFFSET ?`;
     dataArgs = [...cfArgs, limit, offset];
   }
 
@@ -96,7 +114,15 @@ export async function GET(request: Request) {
   const { total } = countResult.rows[0] as unknown as { total: number };
 
   const dataResult = await db.execute({ sql: dataSql, args: dataArgs });
-  const activity = dataResult.rows;
+
+  // Parse fills_json string → array for each row
+  type RawRow = Record<string, unknown>;
+  const activity = (dataResult.rows as unknown as RawRow[]).map((row) => ({
+    ...row,
+    fill_count: (row.fill_count as number) ?? 1,
+    fills: JSON.parse((row.fills_json as string) ?? "[]"),
+    fills_json: undefined,
+  }));
 
   const brokersResult = await db.execute(
     `SELECT DISTINCT broker FROM operations ORDER BY broker`
