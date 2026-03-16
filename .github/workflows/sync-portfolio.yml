@@ -26,7 +26,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pandas requests python-dotenv yfinance
+          python -m pip install --upgrade pip
+          python -m pip install pandas requests python-dotenv yfinance
 
       - name: Sync IBKR
         env:
