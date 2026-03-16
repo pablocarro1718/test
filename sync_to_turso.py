@@ -1,6 +1,6 @@
 """
-Sincroniza portfolio.db (SQLite local) con Turso via turso CLI.
-Requiere: turso CLI instalado y autenticado, o TURSO_DATABASE_URL + TURSO_AUTH_TOKEN en el env.
+Sincroniza portfolio.db (SQLite local) con Turso via HTTP API.
+No requiere CLI de turso instalado.
 
 Uso:
   python3 sync_to_turso.py
@@ -13,8 +13,8 @@ Variables de entorno:
 import sqlite3
 import os
 import sys
-import subprocess
-import tempfile
+import requests
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -32,10 +32,14 @@ if not TURSO_URL or not TURSO_TOKEN:
     print("ERROR: TURSO_DATABASE_URL y TURSO_AUTH_TOKEN deben estar definidos")
     sys.exit(1)
 
+# libsql:// → https:// para la HTTP API
+HTTP_BASE = TURSO_URL.replace("libsql://", "https://")
+API_URL = f"{HTTP_BASE}/v2/pipeline"
+
 # Tablas a sincronizar (en orden)
 TABLES = ["brokers", "symbols", "fx_rates", "operations", "cash_flows", "price_cache"]
 
-BATCH_SIZE = 100  # filas por batch de SQL para no hacer el archivo demasiado grande
+BATCH_SIZE = 50  # sentencias por request HTTP
 
 
 def quote_value(val):
@@ -47,74 +51,49 @@ def quote_value(val):
     return "'" + str(val).replace("'", "''") + "'"
 
 
-def generate_sync_sql(local_conn):
-    """Genera el SQL de sincronización: DELETE + INSERT para todas las tablas."""
-    lines = []
+def build_statements(local_conn):
+    """Genera la lista de sentencias SQL: DELETE + INSERT para todas las tablas."""
+    stmts = []
     for table in TABLES:
         cursor = local_conn.execute(f"SELECT * FROM {table}")
         columns = [d[0] for d in cursor.description]
         rows = cursor.fetchall()
 
-        lines.append(f"-- {table}: {len(rows)} filas")
-        lines.append(f"DELETE FROM {table};")
-
+        stmts.append(f"DELETE FROM {table}")
         for row in rows:
             vals = ", ".join(quote_value(v) for v in row)
             cols = ", ".join(columns)
-            lines.append(f"INSERT INTO {table} ({cols}) VALUES ({vals});")
+            stmts.append(f"INSERT INTO {table} ({cols}) VALUES ({vals})")
 
-    return "\n".join(lines)
+    return stmts
 
 
-def run_turso_shell(sql_content):
-    """Ejecuta SQL contra Turso usando turso db shell."""
-    turso_bin = os.path.expanduser("~/.turso/turso")
-    if not Path(turso_bin).exists():
-        turso_bin = "turso"  # fallback a PATH
+def send_batch(stmts, batch_num, total_batches):
+    """Envía un batch de sentencias a Turso via HTTP API."""
+    headers = {
+        "Authorization": f"Bearer {TURSO_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "requests": [
+            {"type": "execute", "stmt": {"sql": s}} for s in stmts
+        ] + [{"type": "close"}]
+    }
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".sql", delete=False, encoding="utf-8") as f:
-        f.write(sql_content)
-        tmp_path = f.name
+    resp = requests.post(API_URL, headers=headers, json=payload, timeout=60)
 
-    try:
-        cmd = [turso_bin, "db", "shell", "--auth-token", TURSO_TOKEN, TURSO_URL, f".read {tmp_path}"]
-        print(f"  Ejecutando turso db shell...")
-        result = subprocess.run(
-            cmd,
-            env=os.environ,
-            capture_output=True,
-            text=True,
-            timeout=120,
+    if not resp.ok:
+        raise Exception(
+            f"HTTP {resp.status_code} en batch {batch_num}/{total_batches}: {resp.text[:500]}"
         )
-        if result.returncode != 0:
-            print(f"  ERROR: {result.stderr[:500]}")
-            # Try alternative approach: pipe directly
-            return False
-        return True
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
 
-
-def run_turso_shell_pipe(sql_content):
-    """Ejecuta SQL contra Turso usando turso db shell con pipe."""
-    turso_bin = os.path.expanduser("~/.turso/turso")
-    if not Path(turso_bin).exists():
-        turso_bin = "turso"
-
-    cmd = [turso_bin, "db", "shell", "--auth-token", TURSO_TOKEN, TURSO_URL]
-
-    result = subprocess.run(
-        cmd,
-        input=sql_content,
-        env=os.environ,
-        capture_output=True,
-        text=True,
-        timeout=180,
-    )
-    if result.returncode != 0:
-        print(f"  stderr: {result.stderr[:500]}")
-        raise Exception(f"turso shell falló con código {result.returncode}")
-    return result.stdout
+    # Comprobar si hay errores en las respuestas individuales
+    data = resp.json()
+    for i, result in enumerate(data.get("results", [])):
+        if result.get("type") == "error":
+            raise Exception(
+                f"Error en sentencia {i} del batch {batch_num}: {result.get('error', {}).get('message', 'unknown')}"
+            )
 
 
 def main():
@@ -124,28 +103,31 @@ def main():
         sys.exit(1)
 
     print("=" * 50)
-    print("SYNC LOCAL → TURSO")
-    print(f"  Origen: {DB_PATH}")
-    print(f"  Destino: {TURSO_URL}")
+    print("SYNC LOCAL → TURSO (HTTP API)")
+    print(f"  Origen:  {DB_PATH}")
+    print(f"  Destino: {API_URL}")
     print("=" * 50)
 
     local_conn = sqlite3.connect(DB_PATH)
 
     try:
-        # Contar filas antes de generar SQL
         for table in TABLES:
             count = local_conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             print(f"  {table}: {count} filas")
 
-        print("\n  Generando SQL de sincronización...")
-        sql = generate_sync_sql(local_conn)
-        sql_lines = sql.count("\n")
-        print(f"  SQL generado: {sql_lines} líneas")
+        print("\n  Generando sentencias SQL...")
+        stmts = build_statements(local_conn)
+        print(f"  Total sentencias: {len(stmts)}")
 
-        print("  Enviando a Turso...")
-        output = run_turso_shell_pipe(sql)
-        if output:
-            print(f"  Output: {output[:200]}")
+        # Enviar en batches
+        total_batches = (len(stmts) + BATCH_SIZE - 1) // BATCH_SIZE
+        print(f"  Enviando en {total_batches} batch(es) de {BATCH_SIZE}...")
+
+        for i in range(0, len(stmts), BATCH_SIZE):
+            batch = stmts[i : i + BATCH_SIZE]
+            batch_num = i // BATCH_SIZE + 1
+            send_batch(batch, batch_num, total_batches)
+            print(f"  ✓ Batch {batch_num}/{total_batches} ({len(batch)} sentencias)")
 
         print("\n✓ Sincronización completada con éxito")
 
