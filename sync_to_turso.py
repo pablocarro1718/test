@@ -77,11 +77,11 @@ def run_turso_shell(sql_content):
         tmp_path = f.name
 
     try:
-        cmd = [turso_bin, "db", "shell", TURSO_URL, f".read {tmp_path}"]
+        cmd = [turso_bin, "db", "shell", "--auth-token", TURSO_TOKEN, TURSO_URL, f".read {tmp_path}"]
         print(f"  Ejecutando turso db shell...")
         result = subprocess.run(
             cmd,
-            env={**os.environ, "TURSO_AUTH_TOKEN": TURSO_TOKEN},
+            env=os.environ,
             capture_output=True,
             text=True,
             timeout=120,
@@ -101,13 +101,12 @@ def run_turso_shell_pipe(sql_content):
     if not Path(turso_bin).exists():
         turso_bin = "turso"
 
-    cmd = [turso_bin, "db", "shell", TURSO_URL]
-    env = {**os.environ, "TURSO_AUTH_TOKEN": TURSO_TOKEN}
+    cmd = [turso_bin, "db", "shell", "--auth-token", TURSO_TOKEN, TURSO_URL]
 
     result = subprocess.run(
         cmd,
         input=sql_content,
-        env=env,
+        env=os.environ,
         capture_output=True,
         text=True,
         timeout=180,
