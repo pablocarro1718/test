@@ -69,12 +69,10 @@ DEPOSITOS = [
 # Se incluyen en el valor total del portfolio para el XIRR.
 # ============================================================
 EXTERNAL_POSITIONS = [
-    {
-        "platform": "Fintual",
-        "description": "Fondo Fintual – valor actualizado manualmente (USD)",
-        "value_usd": 6814.29,   # ← ACTUALIZAR periódicamente (valor 2026-03-16)
-        "updated_at": "2026-03-16",
-    },
+    # Añadir aquí solo plataformas cuyas posiciones NO están en la tabla operations.
+    # Las posiciones de Fintual (ARGT, IEV, AAPL, AMZN, NU, SPY) SÍ están en
+    # operations y se valoran a precios vivos → NO añadir Fintual aquí.
+    # Usar esta lista solo para fondos opacos sin tracking individual de posiciones.
 ]
 
 SYMBOL_MAP = {
