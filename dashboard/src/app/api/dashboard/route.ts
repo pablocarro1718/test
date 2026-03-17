@@ -12,6 +12,7 @@ type ClosedRow = { ticker: string; qty_bought: number; qty_sold: number; cost: n
 type CfRow = { date: string; flow_type: string; amount_eur: number };
 type PulseRow = { month: string; netChange: number };
 type BrokerRow = { broker: string; invested: number };
+type CashBalRow = { total: number };
 
 export async function GET() {
   const db = getDb();
@@ -104,6 +105,14 @@ export async function GET() {
     ORDER BY month
   `)).rows as unknown as PulseRow[];
 
+  // --- UNINVESTED CASH BALANCES ---
+  // Sum of manually-tracked cash sitting in brokers not yet invested.
+  // Included in XIRR terminal value so the return isn't understated.
+  const cashBalResult = (await db.execute(
+    `SELECT COALESCE(SUM(amount_eur), 0) as total FROM cash_balances`
+  )).rows[0] as unknown as CashBalRow;
+  const cashBalance = cashBalResult?.total ?? 0;
+
   // --- BROKER DISTRIBUTION ---
   const byBroker = (await db.execute(`
     SELECT broker,
@@ -117,6 +126,7 @@ export async function GET() {
   return NextResponse.json({
     holdings,
     openCostBasis,
+    cashBalance,
     positionsCount: openPositions.length,
     allTime: {
       totalInvested: totals?.totalInvested || 0,

@@ -72,6 +72,7 @@ interface DashboardData {
     quantity: number;
     costBasis: number;
   }>;
+  cashBalance: number;
 }
 
 /* ── Constants ──────────────────────────────────────── */
@@ -119,23 +120,30 @@ export default function ReturnsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // XIRR calculation: use actual current market value as terminal cash flow
+  // XIRR calculation: terminal value = market value of holdings + uninvested cash
   const xirrResult = useMemo(() => {
     if (!data || !dashData) return null;
-    const marketValue = dashData.holdings.reduce((sum, h) => {
+
+    let priceMissing = 0;
+    const holdingsValue = dashData.holdings.reduce((sum, h) => {
       const p = prices?.prices[h.ticker];
+      if (!p) priceMissing++;
+      // If price unavailable, fall back to cost basis (assumes no P&L on that holding)
       return sum + (p ? p.priceEur * h.quantity : h.costBasis);
     }, 0);
-    if (marketValue <= 0) return null;
+
+    // Include uninvested cash sitting in brokers (tracked in cash_balances table)
+    const terminalValue = holdingsValue + (dashData.cashBalance ?? 0);
+    if (terminalValue <= 0) return null;
 
     const flows = [
       ...data.xirrFlows.map((f) => ({
         date: new Date(f.date),
         amount: f.amount,
       })),
-      { date: new Date(), amount: marketValue },
+      { date: new Date(), amount: terminalValue },
     ];
-    return xirr(flows);
+    return { rate: xirr(flows), priceMissing };
   }, [data, prices, dashData]);
 
   if (loading) {
@@ -170,9 +178,13 @@ export default function ReturnsPage() {
         <MetricCard
           title="XIRR"
           value={
-            xirrResult !== null ? formatPercent(xirrResult * 100) : "N/A"
+            xirrResult?.rate != null ? formatPercent(xirrResult.rate * 100) : "N/A"
           }
-          subtitle="Annualized return"
+          subtitle={
+            xirrResult?.priceMissing
+              ? `Annualized return · ${xirrResult.priceMissing} holding${xirrResult.priceMissing > 1 ? "s" : ""} using cost basis`
+              : "Annualized return"
+          }
         />
         <MetricCard
           title="Realized P&L"

@@ -28,6 +28,10 @@ export function xirr(
     }, 0);
   }
 
+  // Relative tolerance: residual NPV must be < 1 millionth of total cash deployed
+  const totalAbsFlow = sorted.reduce((s, cf) => s + Math.abs(cf.amount), 0);
+  const tolerance = Math.max(1, totalAbsFlow * 1e-6);
+
   let guess = 0.1;
   for (let i = 0; i < 100; i++) {
     const f = npv(guess);
@@ -40,5 +44,5 @@ export function xirr(
     if (guess > 10) guess = 5;
   }
 
-  return Math.abs(npv(guess)) < 1 ? guess : null;
+  return Math.abs(npv(guess)) < tolerance ? guess : null;
 }

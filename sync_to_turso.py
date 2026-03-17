@@ -37,7 +37,20 @@ HTTP_BASE = TURSO_URL.replace("libsql://", "https://")
 API_URL = f"{HTTP_BASE}/v2/pipeline"
 
 # Tablas a sincronizar (en orden)
-TABLES = ["brokers", "symbols", "fx_rates", "operations", "cash_flows", "price_cache"]
+TABLES = ["brokers", "symbols", "fx_rates", "operations", "cash_flows", "price_cache", "cash_balances"]
+
+# DDL para tablas que pueden no existir aún en Turso
+ENSURE_TABLES_SQL = [
+    """CREATE TABLE IF NOT EXISTS cash_balances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        broker TEXT NOT NULL,
+        currency TEXT NOT NULL,
+        amount REAL NOT NULL,
+        amount_eur REAL NOT NULL,
+        updated_at TEXT NOT NULL,
+        source TEXT DEFAULT 'manual'
+    )""",
+]
 
 BATCH_SIZE = 50  # sentencias por request HTTP
 
@@ -111,6 +124,12 @@ def main():
     local_conn = sqlite3.connect(DB_PATH)
 
     try:
+        # Asegurar que todas las tablas existen en Turso antes de sincronizar
+        if ENSURE_TABLES_SQL:
+            print("\n  Asegurando schema remoto...")
+            send_batch(ENSURE_TABLES_SQL, 0, 0)
+            print(f"  ✓ Schema remoto verificado")
+
         for table in TABLES:
             count = local_conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             print(f"  {table}: {count} filas")

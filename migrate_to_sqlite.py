@@ -94,6 +94,18 @@ SYMBOL_MAP = {
     'LTRX': {'yfinance': 'LTRX', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Lantronix'},
 }
 
+# ============================================================
+# Saldos de efectivo no invertido por broker
+# Actualizar estos valores manualmente cuando cambien.
+# Se usan para calcular el valor total del portfolio en XIRR
+# (el efectivo no invertido también es parte del portfolio).
+# ============================================================
+SALDOS_CAJA = [
+    # {'broker': 'IBKR',       'currency': 'USD', 'amount': 0.0,  'amount_eur': 0.0,  'updated_at': '2026-03-16'},
+    # {'broker': 'Kraken',     'currency': 'EUR', 'amount': 0.0,  'amount_eur': 0.0,  'updated_at': '2026-03-16'},
+    # {'broker': 'Fintual',    'currency': 'EUR', 'amount': 0.0,  'amount_eur': 0.0,  'updated_at': '2026-03-16'},
+]
+
 BROKERS = [
     {'name': 'Degiro', 'display_name': 'Degiro', 'base_currency': 'EUR', 'sync_method': 'manual_csv', 'is_active': 0},
     {'name': 'Trading212', 'display_name': 'Trading 212', 'base_currency': 'EUR', 'sync_method': 'manual_csv', 'is_active': 0},
@@ -198,6 +210,16 @@ CREATE TABLE IF NOT EXISTS price_cache (
 );
 
 CREATE INDEX IF NOT EXISTS idx_price_cache_lookup ON price_cache(date, symbol);
+
+CREATE TABLE IF NOT EXISTS cash_balances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    broker TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    amount REAL NOT NULL,
+    amount_eur REAL NOT NULL,
+    updated_at TEXT NOT NULL,
+    source TEXT DEFAULT 'manual'
+);
 """
 
 
@@ -344,6 +366,31 @@ def migrate_fx_rates(conn):
     return count
 
 
+def migrate_cash_balances(conn):
+    """Migra saldos de efectivo no invertido a la tabla cash_balances."""
+    count = 0
+    for saldo in SALDOS_CAJA:
+        conn.execute("""
+            INSERT INTO cash_balances (broker, currency, amount, amount_eur, updated_at, source)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            saldo["broker"],
+            saldo["currency"],
+            saldo["amount"],
+            saldo["amount_eur"],
+            saldo["updated_at"],
+            "manual",
+        ))
+        count += 1
+
+    conn.commit()
+    if count:
+        print(f"  ✓ {count} saldos de caja migrados")
+    else:
+        print("  ℹ  No hay saldos de caja configurados (SALDOS_CAJA vacío)")
+    return count
+
+
 def migrate_symbols(conn):
     """Seedea la tabla symbols desde SYMBOL_MAP."""
     count = 0
@@ -427,23 +474,26 @@ def main():
     print("MIGRACIÓN A SQLITE")
     print("=" * 60)
 
-    print("\n[1/6] Creando base de datos...")
+    print("\n[1/7] Creando base de datos...")
     conn = create_database()
 
-    print("\n[2/6] Migrando operaciones desde CSV...")
+    print("\n[2/7] Migrando operaciones desde CSV...")
     migrate_operations(conn)
 
-    print("\n[3/6] Migrando depósitos y retiradas...")
+    print("\n[3/7] Migrando depósitos y retiradas...")
     migrate_cash_flows(conn)
 
-    print("\n[4/6] Almacenando tipos de cambio históricos...")
+    print("\n[4/7] Almacenando tipos de cambio históricos...")
     migrate_fx_rates(conn)
 
-    print("\n[5/6] Registrando símbolos y tickers...")
+    print("\n[5/7] Registrando símbolos y tickers...")
     migrate_symbols(conn)
 
-    print("\n[6/6] Registrando brokers...")
+    print("\n[6/7] Registrando brokers...")
     migrate_brokers(conn)
+
+    print("\n[7/7] Migrando saldos de caja no invertidos...")
+    migrate_cash_balances(conn)
 
     print("\n" + "=" * 60)
     print("VALIDACIÓN")
