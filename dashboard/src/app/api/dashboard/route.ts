@@ -13,6 +13,7 @@ type CfRow = { date: string; flow_type: string; amount_eur: number };
 type PulseRow = { month: string; netChange: number };
 type BrokerRow = { broker: string; invested: number };
 type CashBalRow = { total: number };
+type ExtPosRow = { total: number; platforms: string };
 
 export async function GET() {
   const db = getDb();
@@ -118,6 +119,21 @@ export async function GET() {
     // cash_balances table not yet created in this Turso instance
   }
 
+  // --- EXTERNAL POSITIONS (e.g. Fintual) ---
+  // Manually-tracked external funds included in XIRR terminal value.
+  // Table may not exist yet in older Turso instances — default to 0.
+  let externalValue = 0;
+  let externalPositions: Array<{ platform: string; description: string; value_eur: number }> = [];
+  try {
+    const extRows = (await db.execute(
+      `SELECT platform, description, value_eur FROM external_positions ORDER BY value_eur DESC`
+    )).rows as unknown as Array<{ platform: string; description: string; value_eur: number }>;
+    externalPositions = extRows;
+    externalValue = extRows.reduce((sum, r) => sum + r.value_eur, 0);
+  } catch {
+    // external_positions table not yet synced to this Turso instance
+  }
+
   // --- BROKER DISTRIBUTION ---
   const byBroker = (await db.execute(`
     SELECT broker,
@@ -132,6 +148,8 @@ export async function GET() {
     holdings,
     openCostBasis,
     cashBalance,
+    externalValue,
+    externalPositions,
     positionsCount: openPositions.length,
     allTime: {
       totalInvested: totals?.totalInvested || 0,

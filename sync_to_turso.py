@@ -37,7 +37,7 @@ HTTP_BASE = TURSO_URL.replace("libsql://", "https://")
 API_URL = f"{HTTP_BASE}/v2/pipeline"
 
 # Tablas a sincronizar (en orden)
-TABLES = ["brokers", "symbols", "fx_rates", "operations", "cash_flows", "price_cache", "cash_balances"]
+TABLES = ["brokers", "symbols", "fx_rates", "operations", "cash_flows", "price_cache", "cash_balances", "external_positions"]
 
 # DDL para tablas que pueden no existir aún en Turso
 ENSURE_TABLES_SQL = [
@@ -49,6 +49,15 @@ ENSURE_TABLES_SQL = [
         amount_eur REAL NOT NULL,
         updated_at TEXT NOT NULL,
         source TEXT DEFAULT 'manual'
+    )""",
+    """CREATE TABLE IF NOT EXISTS external_positions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        platform TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        value_usd REAL NOT NULL,
+        value_eur REAL NOT NULL,
+        updated_at TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
     )""",
 ]
 

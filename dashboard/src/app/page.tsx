@@ -42,6 +42,8 @@ interface DashboardData {
     realizedPnl: number;
   };
   xirrFlows: Array<{ date: string; amount: number }>;
+  externalValue: number;
+  externalPositions: Array<{ platform: string; description: string; value_eur: number }>;
   allocation: Array<{ assetType: string; costBasis: number }>;
   topHoldings: Array<{
     ticker: string;
@@ -130,11 +132,12 @@ export default function DashboardPage() {
 
   /* ── Derived values ─────────────────────────────── */
 
-  // Market value from live prices
-  const marketValue = data.holdings.reduce((sum, h) => {
+  // Market value from live prices + external positions (e.g. Fintual)
+  const stocksValue = data.holdings.reduce((sum, h) => {
     const p = prices?.prices[h.ticker];
     return sum + (p ? p.priceEur * h.quantity : h.costBasis);
   }, 0);
+  const marketValue = stocksValue + (data.externalValue ?? 0);
 
   const unrealizedPnl = marketValue - data.openCostBasis;
   const unrealizedPct =
@@ -184,13 +187,17 @@ export default function DashboardPage() {
     .slice(0, 6)
     .filter((m) => m.changePercent < 0);
 
-  // Allocation: compute by market value
+  // Allocation: compute by market value (includes external positions)
   const allocationByType: Record<string, number> = {};
   for (const h of data.holdings) {
     const p = prices?.prices[h.ticker];
     const val = p ? p.priceEur * h.quantity : h.costBasis;
     const type = h.assetType || "Unknown";
     allocationByType[type] = (allocationByType[type] || 0) + val;
+  }
+  // Add external positions as "Fondo Externo" asset type
+  if ((data.externalValue ?? 0) > 0) {
+    allocationByType["Fondo Externo"] = (allocationByType["Fondo Externo"] || 0) + data.externalValue;
   }
   const totalAllocation = Object.values(allocationByType).reduce(
     (s, v) => s + v,
@@ -204,14 +211,21 @@ export default function DashboardPage() {
     }))
     .sort((a, b) => b.value - a.value);
 
-  // Pie chart data: all tickers by market value
-  const pieData = data.holdings
-    .map((h) => {
-      const p = prices?.prices[h.ticker];
-      const val = p ? p.priceEur * h.quantity : h.costBasis;
-      return { name: h.ticker, value: val, pct: totalAllocation > 0 ? (val / totalAllocation) * 100 : 0 };
-    })
-    .sort((a, b) => b.value - a.value);
+  // Pie chart data: all tickers by market value + external positions
+  const externalPieEntries = (data.externalPositions ?? []).map((ep) => ({
+    name: ep.platform,
+    value: ep.value_eur,
+    pct: totalAllocation > 0 ? (ep.value_eur / totalAllocation) * 100 : 0,
+  }));
+  const pieData = [
+    ...data.holdings
+      .map((h) => {
+        const p = prices?.prices[h.ticker];
+        const val = p ? p.priceEur * h.quantity : h.costBasis;
+        return { name: h.ticker, value: val, pct: totalAllocation > 0 ? (val / totalAllocation) * 100 : 0 };
+      }),
+    ...externalPieEntries,
+  ].sort((a, b) => b.value - a.value);
 
   // Is weekend?
   const dayOfWeek = new Date().getDay();

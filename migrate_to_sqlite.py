@@ -57,8 +57,24 @@ DEPOSITOS = [
     {'fecha': '2025-10-24', 'broker': 'Fintual', 'cantidad': 1335.43, 'moneda': 'EUR', 'tipo': 'deposit'},
     {'fecha': '2025-12-15', 'broker': 'Fintual', 'cantidad': 1372.11, 'moneda': 'EUR', 'tipo': 'deposit'},
     # IBKR - Depósitos
-    {'fecha': '2026-01-02', 'broker': 'IBKR', 'cantidad': 30000.00, 'moneda': 'MXN', 'tipo': 'deposit'},
+    # Nota: para MXN se puede incluir 'fx_rate' (EUR/MXN) para mayor precisión.
+    # EURUSD 2026-01-02 = 1.175 × USD/MXN ~20.4 = EUR/MXN ~23.97
+    {'fecha': '2026-01-02', 'broker': 'IBKR', 'cantidad': 30000.00, 'moneda': 'MXN', 'tipo': 'deposit', 'fx_rate': 23.97},
     {'fecha': '2026-01-23', 'broker': 'IBKR', 'cantidad': 1000.00, 'moneda': 'EUR', 'tipo': 'deposit'},
+]
+
+# ============================================================
+# Posiciones externas (plataformas no trackeadas en operations)
+# Actualizar 'value_usd' cuando cambie el valor del fondo.
+# Se incluyen en el valor total del portfolio para el XIRR.
+# ============================================================
+EXTERNAL_POSITIONS = [
+    {
+        "platform": "Fintual",
+        "description": "Fondo Fintual – valor actualizado manualmente (USD)",
+        "value_usd": 6814.29,   # ← ACTUALIZAR periódicamente (valor 2026-03-16)
+        "updated_at": "2026-03-16",
+    },
 ]
 
 SYMBOL_MAP = {
@@ -220,6 +236,16 @@ CREATE TABLE IF NOT EXISTS cash_balances (
     updated_at TEXT NOT NULL,
     source TEXT DEFAULT 'manual'
 );
+
+CREATE TABLE IF NOT EXISTS external_positions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    value_usd REAL NOT NULL,
+    value_eur REAL NOT NULL,
+    updated_at TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 
@@ -298,8 +324,8 @@ def migrate_cash_flows(conn):
             amount_eur = amount
             fx_rate = None
         elif moneda == "MXN":
-            # MXN: usar tasa aproximada del momento del depósito
-            fx_rate = 18.0
+            # MXN: usar tasa del depósito si se especifica, si no 18.0 como fallback
+            fx_rate = dep.get("fx_rate", 18.0)
             amount_eur = amount / fx_rate
         else:
             amount_eur = amount
@@ -363,6 +389,41 @@ def migrate_fx_rates(conn):
 
     conn.commit()
     print(f"  ✓ {count} tipos de cambio almacenados")
+    return count
+
+
+def migrate_external_positions(conn):
+    """Migra posiciones externas (e.g. Fintual) a la tabla external_positions.
+
+    El valor en USD se convierte a EUR usando el tipo de cambio EURUSD más
+    cercano disponible en la tabla fx_rates. Si no hay ningún rate disponible
+    se usa 1.15 como fallback razonable para 2025-2026.
+    """
+    conn.execute("DELETE FROM external_positions")
+    count = 0
+    for pos in EXTERNAL_POSITIONS:
+        # Buscar el EURUSD más cercano a updated_at
+        row = conn.execute(
+            """SELECT rate FROM fx_rates
+               WHERE pair = 'EURUSD=X'
+               ORDER BY ABS(julianday(date) - julianday(?)) LIMIT 1""",
+            (pos["updated_at"],)
+        ).fetchone()
+        eurusd = row[0] if row else 1.15
+        value_eur = round(pos["value_usd"] / eurusd, 2)
+
+        conn.execute("""
+            INSERT INTO external_positions (platform, description, value_usd, value_eur, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (pos["platform"], pos["description"], pos["value_usd"], value_eur, pos["updated_at"]))
+        count += 1
+        print(f"    {pos['platform']}: ${pos['value_usd']:,.2f} USD → {value_eur:,.2f} EUR (EURUSD={eurusd})")
+
+    conn.commit()
+    if count:
+        print(f"  ✓ {count} posición(es) externa(s) migrada(s)")
+    else:
+        print("  ℹ  No hay posiciones externas configuradas (EXTERNAL_POSITIONS vacío)")
     return count
 
 
@@ -474,26 +535,29 @@ def main():
     print("MIGRACIÓN A SQLITE")
     print("=" * 60)
 
-    print("\n[1/7] Creando base de datos...")
+    print("\n[1/8] Creando base de datos...")
     conn = create_database()
 
-    print("\n[2/7] Migrando operaciones desde CSV...")
+    print("\n[2/8] Migrando operaciones desde CSV...")
     migrate_operations(conn)
 
-    print("\n[3/7] Migrando depósitos y retiradas...")
+    print("\n[3/8] Migrando depósitos y retiradas...")
     migrate_cash_flows(conn)
 
-    print("\n[4/7] Almacenando tipos de cambio históricos...")
+    print("\n[4/8] Almacenando tipos de cambio históricos...")
     migrate_fx_rates(conn)
 
-    print("\n[5/7] Registrando símbolos y tickers...")
+    print("\n[5/8] Registrando símbolos y tickers...")
     migrate_symbols(conn)
 
-    print("\n[6/7] Registrando brokers...")
+    print("\n[6/8] Registrando brokers...")
     migrate_brokers(conn)
 
-    print("\n[7/7] Migrando saldos de caja no invertidos...")
+    print("\n[7/8] Migrando saldos de caja no invertidos...")
     migrate_cash_balances(conn)
+
+    print("\n[8/8] Migrando posiciones externas (Fintual, etc.)...")
+    migrate_external_positions(conn)
 
     print("\n" + "=" * 60)
     print("VALIDACIÓN")
