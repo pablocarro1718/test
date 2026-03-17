@@ -1,0 +1,14 @@
+{
+  "name": "Portfolio Tracker",
+  "short_name": "Portfolio",
+  "description": "Multi-broker investment portfolio dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f1eb",
+  "theme_color": "#16a34a",
+  "icons": [
+    { "src": "/apple-icon", "sizes": "180x180", "type": "image/png" },
+    { "src": "/apple-icon", "sizes": "192x192", "type": "image/png" },
+    { "src": "/apple-icon", "sizes": "512x512", "type": "image/png" }
+  ]
+}

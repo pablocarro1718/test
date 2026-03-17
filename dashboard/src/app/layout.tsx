@@ -17,6 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Portfolio Tracker",
   description: "Multi-broker investment portfolio dashboard",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
