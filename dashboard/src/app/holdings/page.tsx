@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { xirr } from "@/lib/xirr";
 import {
   BarChart,
   Bar,
@@ -50,6 +51,7 @@ interface HoldingsData {
     totalDividends: number;
   };
   brokerList: string[];
+  cashFlowsByTicker: Record<string, Array<{ date: string; amount: number }>>;
 }
 
 interface PricesData {
@@ -71,6 +73,7 @@ type HoldingRow = Holding & {
   unrealizedPct: number;
   dailyChange: number;
   weight: number;
+  tir: number | null;
 };
 
 /* ── Constants ──────────────────────────────────────── */
@@ -138,7 +141,14 @@ export default function HoldingsPage() {
     const unrealizedPct = h.costBasis > 0 ? (unrealizedPnl / h.costBasis) * 100 : 0;
     const dailyChange = p?.changePercent || 0;
     const weight = totalMarketValue > 0 ? (marketValue / totalMarketValue) * 100 : 0;
-    return { ...h, marketValue, unrealizedPnl, unrealizedPct, dailyChange, weight };
+    const historicFlows = (data.cashFlowsByTicker[h.ticker] || []).map((f) => ({
+      date: new Date(f.date),
+      amount: f.amount,
+    }));
+    const tir = historicFlows.length >= 1
+      ? xirr([...historicFlows, { date: new Date(), amount: marketValue }])
+      : null;
+    return { ...h, marketValue, unrealizedPnl, unrealizedPct, dailyChange, weight, tir };
   });
 
   /* ── KPI computations ────────────────────────── */
@@ -146,8 +156,8 @@ export default function HoldingsPage() {
   const totalUnrealizedPnl = holdingsWithMarket.reduce((s, h) => s + h.unrealizedPnl, 0);
   const totalCostBasis = holdingsWithMarket.reduce((s, h) => s + h.costBasis, 0);
   const totalUnrealizedPct = totalCostBasis > 0 ? (totalUnrealizedPnl / totalCostBasis) * 100 : 0;
-  const bestPerformer = holdingsWithMarket.reduce((best, h) => h.unrealizedPct > (best?.unrealizedPct ?? -Infinity) ? h : best, holdingsWithMarket[0]);
-  const worstPerformer = holdingsWithMarket.reduce((worst, h) => h.unrealizedPct < (worst?.unrealizedPct ?? Infinity) ? h : worst, holdingsWithMarket[0]);
+  const top3Best = [...holdingsWithMarket].sort((a, b) => b.unrealizedPct - a.unrealizedPct).slice(0, 3);
+  const top3Worst = [...holdingsWithMarket].sort((a, b) => a.unrealizedPct - b.unrealizedPct).slice(0, 3);
 
   /* ── Chart data ──────────────────────────────── */
 
@@ -232,6 +242,17 @@ export default function HoldingsPage() {
       footer: "sum",
       getValue: (r) => r.weight,
       render: (r) => <span className="text-sm">{r.weight.toFixed(1)}%</span>,
+    },
+    {
+      key: "tir",
+      label: "TIR",
+      secondary: true,
+      sortable: true,
+      align: "right",
+      getValue: (r) => r.tir ?? -Infinity,
+      render: (r) => r.tir != null
+        ? <span className={cn("font-mono text-sm", r.tir >= 0 ? "text-positive" : "text-negative")}>{formatPercent(r.tir * 100)}</span>
+        : <span className="text-sm text-muted-foreground">—</span>,
     },
     // Secondary columns
     {
@@ -380,16 +401,30 @@ export default function HoldingsPage() {
           value={formatCurrency(totalUnrealizedPnl)}
           trend={{ value: formatPercent(totalUnrealizedPct), positive: totalUnrealizedPnl >= 0 }}
         />
-        <MetricCard
-          title="Best Performer"
-          value={bestPerformer?.ticker || "-"}
-          trend={bestPerformer ? { value: formatPercent(bestPerformer.unrealizedPct), positive: bestPerformer.unrealizedPct >= 0 } : undefined}
-        />
-        <MetricCard
-          title="Worst Performer"
-          value={worstPerformer?.ticker || "-"}
-          trend={worstPerformer ? { value: formatPercent(worstPerformer.unrealizedPct), positive: worstPerformer.unrealizedPct >= 0 } : undefined}
-        />
+        <Card>
+          <CardContent className="p-4">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Top 3 Best</p>
+            {top3Best.map((h) => (
+              <div key={h.ticker} className="flex items-center justify-between py-1 text-sm border-t border-border/40 first:border-0">
+                <span className="font-mono font-medium w-14 shrink-0">{h.ticker}</span>
+                <span className={cn("font-mono text-xs", h.unrealizedPct >= 0 ? "text-positive" : "text-negative")}>{formatPercent(h.unrealizedPct)}</span>
+                <span className="font-mono text-xs text-muted-foreground">{formatCurrency(h.marketValue)}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Top 3 Worst</p>
+            {top3Worst.map((h) => (
+              <div key={h.ticker} className="flex items-center justify-between py-1 text-sm border-t border-border/40 first:border-0">
+                <span className="font-mono font-medium w-14 shrink-0">{h.ticker}</span>
+                <span className={cn("font-mono text-xs", h.unrealizedPct >= 0 ? "text-positive" : "text-negative")}>{formatPercent(h.unrealizedPct)}</span>
+                <span className="font-mono text-xs text-muted-foreground">{formatCurrency(h.marketValue)}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
         <MetricCard
           title="Commissions Paid"
           value={formatCurrency(data.summary.totalCommission)}

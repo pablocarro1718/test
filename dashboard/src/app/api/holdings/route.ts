@@ -10,6 +10,7 @@ type ConsolidatedRow = {
 };
 type BrokerRow = { ticker: string; broker: string; net_qty: number; total_qty_buy: number; total_cost: number };
 type BrokerListRow = { broker: string };
+type TickerFlowRow = { ticker: string; date: string; amount: number };
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -130,9 +131,27 @@ export async function GET(request: Request) {
     `SELECT DISTINCT broker FROM operations ORDER BY broker`
   )).rows as unknown as BrokerListRow[]).map((b) => b.broker);
 
+  // --- PER-TICKER CASH FLOWS (for XIRR per position) ---
+  const tickerFlows = (await db.execute({
+    sql: `SELECT ticker, date,
+      CASE WHEN operation_type='BUY' THEN -ABS(net_amount_eur)
+           ELSE net_amount_eur END as amount
+    FROM operations
+    WHERE operation_type IN ('BUY','SELL','DIVIDEND')
+    ORDER BY ticker, date`,
+    args: [],
+  })).rows as unknown as TickerFlowRow[];
+
+  const cashFlowsByTicker: Record<string, Array<{ date: string; amount: number }>> = {};
+  for (const f of tickerFlows) {
+    if (!cashFlowsByTicker[f.ticker]) cashFlowsByTicker[f.ticker] = [];
+    cashFlowsByTicker[f.ticker].push({ date: f.date, amount: f.amount });
+  }
+
   return NextResponse.json({
     holdings,
     summary: { totalPositions: holdings.length, totalCostBasis, totalCommission, totalDividends },
     brokerList,
+    cashFlowsByTicker,
   });
 }

@@ -12,6 +12,7 @@ from pathlib import Path
 DIR = Path(__file__).parent
 DB_PATH = DIR / "portfolio.db"
 CSV_PATH = DIR / "inversiones_unificadas.csv"
+IBKR_DEPOSITS_CSV = DIR / "ibkr_deposits.csv"
 
 # ============================================================
 # Datos hardcoded a migrar (de app.py y otros scripts)
@@ -61,6 +62,10 @@ DEPOSITOS = [
     # EURUSD 2026-01-02 = 1.175 × USD/MXN ~20.4 = EUR/MXN ~23.97
     {'fecha': '2026-01-02', 'broker': 'IBKR', 'cantidad': 30000.00, 'moneda': 'MXN', 'tipo': 'deposit', 'fx_rate': 23.97},
     {'fecha': '2026-01-23', 'broker': 'IBKR', 'cantidad': 1000.00, 'moneda': 'EUR', 'tipo': 'deposit'},
+    # EURUSD 2026-02-02 ~1.058 × USD/MXN ~20.38 = EUR/MXN ~21.57
+    {'fecha': '2026-02-02', 'broker': 'IBKR', 'cantidad': 25000.00, 'moneda': 'MXN', 'tipo': 'deposit', 'fx_rate': 21.57},
+    {'fecha': '2026-02-25', 'broker': 'IBKR', 'cantidad': 1000.00, 'moneda': 'EUR', 'tipo': 'deposit'},
+    {'fecha': '2026-03-11', 'broker': 'IBKR', 'cantidad': 1000.00, 'moneda': 'EUR', 'tipo': 'deposit'},
 ]
 
 # ============================================================
@@ -310,10 +315,38 @@ def migrate_operations(conn):
     return count
 
 
+def _ibkr_deposits_from_csv() -> list:
+    """Lee ibkr_deposits.csv y devuelve entradas normalizadas al formato DEPOSITOS."""
+    if not IBKR_DEPOSITS_CSV.exists():
+        return []
+    results = []
+    with open(IBKR_DEPOSITS_CSV, newline='', encoding='utf-8') as f:
+        for row in csv.DictReader(f):
+            try:
+                amount = float(row['Cantidad'])
+                results.append({
+                    'fecha': row['Fecha'],
+                    'broker': 'IBKR',
+                    'cantidad': amount,
+                    'moneda': row['Moneda'],
+                    'tipo': 'deposit' if amount > 0 else 'withdrawal',
+                })
+            except (KeyError, ValueError):
+                continue
+    return results
+
+
 def migrate_cash_flows(conn):
     """Migra depósitos y retiradas a la tabla cash_flows."""
+    hardcoded_keys = {(d['fecha'], d['broker'], d['cantidad'], d['moneda']) for d in DEPOSITOS}
+    auto = [d for d in _ibkr_deposits_from_csv()
+            if (d['fecha'], d['broker'], d['cantidad'], d['moneda']) not in hardcoded_keys]
+    if auto:
+        print(f"  ℹ  {len(auto)} depósito(s) IBKR adicionales importados desde ibkr_deposits.csv")
+    all_deposits = DEPOSITOS + auto
+
     count = 0
-    for dep in DEPOSITOS:
+    for dep in all_deposits:
         amount = dep["cantidad"]
         moneda = dep["moneda"]
 
@@ -526,6 +559,21 @@ def validate(conn):
         "SELECT ROUND(SUM(amount_eur), 2) FROM cash_flows WHERE flow_type = 'withdrawal'"
     ).fetchone()[0] or 0
     print(f"    ✓ Cash flows: {cf_count} ({deposits:,.2f} depositos, {withdrawals:,.2f} retiradas)")
+
+    # IBKR deposit reconciliation
+    if IBKR_DEPOSITS_CSV.exists():
+        cf_keys = {(r[0], r[1], r[2]) for r in conn.execute(
+            "SELECT date, amount, currency FROM cash_flows WHERE broker='IBKR'"
+        ).fetchall()}
+        missing = []
+        for d in _ibkr_deposits_from_csv():
+            if (d['fecha'], d['cantidad'], d['moneda']) not in cf_keys:
+                missing.append(d)
+        if missing:
+            for d in missing:
+                print(f"    ⚠  IBKR CSV deposit NOT in DB: {d['fecha']} {d['cantidad']} {d['moneda']}")
+        else:
+            print(f"    ✓ Todos los depósitos IBKR del CSV están en la BD")
 
 
 def main():
