@@ -28,7 +28,23 @@ import {
   SlidersHorizontal,
   ChevronRight as ExpandIcon,
   ChevronDown as CollapseIcon,
+  GripVertical,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 /* ─────────────────────────────────────────────────────── */
 /*  Types                                                  */
@@ -93,19 +109,75 @@ function formatFooterValue(
 }
 
 /* ─────────────────────────────────────────────────────── */
-/*  Column Selector Popover                                */
+/*  Column Selector Popover (with drag-to-reorder)         */
 /* ─────────────────────────────────────────────────────── */
 
 interface ColSelectorProps<T> {
   columns: ColumnDef<T>[];
+  columnOrder: string[];
   visible: Set<string>;
   onToggle: (key: string) => void;
+  onReorder: (newOrder: string[]) => void;
 }
 
-function ColSelector<T>({ columns, visible, onToggle }: ColSelectorProps<T>) {
+function SortableColItem<T>({
+  col,
+  visible,
+  onToggle,
+}: {
+  col: ColumnDef<T>;
+  visible: Set<string>;
+  onToggle: (key: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: col.key });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const isAlwaysVisible = !col.secondary;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex cursor-default items-center gap-1.5 rounded-sm px-1.5 py-1 text-xs hover:bg-muted"
+    >
+      <span
+        {...attributes}
+        {...listeners}
+        className="cursor-grab touch-none text-muted-foreground/40 hover:text-muted-foreground"
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </span>
+      <label className="flex flex-1 cursor-pointer items-center gap-1.5">
+        <input
+          type="checkbox"
+          checked={isAlwaysVisible || visible.has(col.key)}
+          disabled={isAlwaysVisible}
+          onChange={() => !isAlwaysVisible && onToggle(col.key)}
+          className="h-3 w-3 accent-primary"
+        />
+        <span className={isAlwaysVisible ? "text-foreground" : ""}>{col.label}</span>
+      </label>
+    </div>
+  );
+}
+
+function ColSelector<T>({
+  columns,
+  columnOrder,
+  visible,
+  onToggle,
+  onReorder,
+}: ColSelectorProps<T>) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const secondary = columns.filter((c) => c.secondary);
+  const sensors = useSensors(useSensor(PointerSensor));
 
   useEffect(() => {
     if (!open) return;
@@ -118,7 +190,21 @@ function ColSelector<T>({ columns, visible, onToggle }: ColSelectorProps<T>) {
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  if (secondary.length === 0) return null;
+  // Build ordered list of all columns
+  const orderedCols = columnOrder
+    .map((key) => columns.find((c) => c.key === key))
+    .filter((c): c is ColumnDef<T> => !!c);
+
+  if (columns.filter((c) => c.secondary).length === 0) return null;
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = columnOrder.indexOf(active.id as string);
+      const newIndex = columnOrder.indexOf(over.id as string);
+      onReorder(arrayMove(columnOrder, oldIndex, newIndex));
+    }
+  }
 
   return (
     <div ref={ref} className="relative">
@@ -126,32 +212,39 @@ function ColSelector<T>({ columns, visible, onToggle }: ColSelectorProps<T>) {
         onClick={() => setOpen((o) => !o)}
         className={cn(
           "flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium transition-colors",
-          open ? "bg-muted text-foreground" : "bg-background text-muted-foreground hover:text-foreground"
+          open
+            ? "bg-muted text-foreground"
+            : "bg-background text-muted-foreground hover:text-foreground"
         )}
       >
         <SlidersHorizontal className="h-3.5 w-3.5" />
         Columns
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-md border border-border bg-card shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-md border border-border bg-card shadow-lg">
           <div className="p-2">
             <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Optional columns
+              Columns — drag to reorder
             </p>
-            {secondary.map((col) => (
-              <label
-                key={col.key}
-                className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1 text-xs hover:bg-muted"
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={columnOrder}
+                strategy={verticalListSortingStrategy}
               >
-                <input
-                  type="checkbox"
-                  checked={visible.has(col.key)}
-                  onChange={() => onToggle(col.key)}
-                  className="h-3 w-3 accent-primary"
-                />
-                <span>{col.label}</span>
-              </label>
-            ))}
+                {orderedCols.map((col) => (
+                  <SortableColItem
+                    key={col.key}
+                    col={col}
+                    visible={visible}
+                    onToggle={onToggle}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           </div>
         </div>
       )}
@@ -299,6 +392,36 @@ export function DataTable<T>({
     });
   }
 
+  /* ── Column order ────────────────────────────────────── */
+  const defaultOrder = columns.map((c) => c.key);
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    if (storageKey && typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(`dt-cols-order-${storageKey}`);
+        if (stored) {
+          const parsed: string[] = JSON.parse(stored);
+          // Merge: keep stored order but add any new columns at the end
+          const storedSet = new Set(parsed);
+          const merged = [...parsed.filter((k) => defaultOrder.includes(k))];
+          for (const k of defaultOrder) {
+            if (!storedSet.has(k)) merged.push(k);
+          }
+          return merged;
+        }
+      } catch {}
+    }
+    return defaultOrder;
+  });
+
+  function reorderColumns(newOrder: string[]) {
+    setColumnOrder(newOrder);
+    if (storageKey) {
+      try {
+        localStorage.setItem(`dt-cols-order-${storageKey}`, JSON.stringify(newOrder));
+      } catch {}
+    }
+  }
+
   /* ── Expanded rows ───────────────────────────────────── */
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
@@ -311,10 +434,13 @@ export function DataTable<T>({
     });
   }
 
-  /* ── Visible columns ─────────────────────────────────── */
+  /* ── Visible columns (ordered) ──────────────────────── */
   const visibleColumns = useMemo(
-    () => columns.filter((c) => !c.secondary || visibleSecondary.has(c.key)),
-    [columns, visibleSecondary]
+    () =>
+      columnOrder
+        .map((key) => columns.find((c) => c.key === key))
+        .filter((c): c is ColumnDef<T> => !!c && (!c.secondary || visibleSecondary.has(c.key))),
+    [columns, columnOrder, visibleSecondary]
   );
 
   /* ── Sort handler ────────────────────────────────────── */
@@ -398,8 +524,10 @@ export function DataTable<T>({
           </div>
           <ColSelector
             columns={columns}
+            columnOrder={columnOrder}
             visible={visibleSecondary}
             onToggle={toggleColumn}
+            onReorder={reorderColumns}
           />
         </div>
       )}

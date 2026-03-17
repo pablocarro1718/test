@@ -497,6 +497,42 @@ export default function DashboardPage() {
                 </ResponsiveContainer>
               </div>
             )}
+
+            {/* Legend table */}
+            {pieData.length > 0 && (
+              <div className="mt-4 max-h-[180px] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-card">
+                    <tr className="border-b border-border text-muted-foreground">
+                      <th className="pb-1.5 text-left font-medium">Asset</th>
+                      <th className="pb-1.5 text-right font-medium">%</th>
+                      <th className="pb-1.5 text-right font-medium">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pieData.map((entry, i) => (
+                      <tr key={entry.name} className="border-t border-border/40">
+                        <td className="py-1">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full"
+                              style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                            />
+                            <span className="font-mono font-medium">{entry.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-1 text-right tabular-nums text-muted-foreground">
+                          {entry.pct.toFixed(1)}%
+                        </td>
+                        <td className="py-1 text-right font-mono tabular-nums text-muted-foreground">
+                          {formatCurrency(entry.value)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

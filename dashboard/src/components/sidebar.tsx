@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
 }
 
 const navItems = [
@@ -23,27 +25,40 @@ const navItems = [
   },
 ];
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
 
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-sidebar transition-[width] duration-300",
-        collapsed ? "w-16" : "w-64"
+        "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-sidebar",
+        "transition-[width,transform] duration-300",
+        /* Desktop: width toggle */
+        collapsed ? "lg:w-16" : "lg:w-64",
+        /* Mobile: always w-64, slide in/out */
+        "w-64",
+        mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}
     >
       {/* Logo */}
       <div className={cn(
         "flex h-14 items-center border-b border-border",
-        collapsed ? "justify-center px-0" : "gap-2.5 px-4"
+        collapsed ? "lg:justify-center lg:px-0 gap-2.5 px-4" : "gap-2.5 px-4"
       )}>
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-positive text-white text-sm font-bold">
           P
         </div>
-        {!collapsed && (
-          <span className="text-base font-semibold font-serif">Portfolio Tracker</span>
-        )}
+        <span className={cn("text-base font-semibold font-serif", collapsed && "lg:hidden")}>
+          Portfolio Tracker
+        </span>
+        {/* Mobile close button */}
+        <button
+          onClick={onMobileClose}
+          className="ml-auto rounded-md p-1 text-muted-foreground hover:text-foreground lg:hidden"
+          aria-label="Close navigation"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Nav */}
@@ -66,10 +81,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     <Link
                       href={item.href}
                       title={collapsed ? item.name : undefined}
+                      onClick={onMobileClose}
                       className={cn(
                         "flex items-center rounded-md transition-colors",
                         collapsed
-                          ? "justify-center px-0 py-2.5"
+                          ? "lg:justify-center lg:px-0 lg:py-2.5 gap-3 px-3 py-2"
                           : "gap-3 px-3 py-2",
                         isActive
                           ? "bg-white text-foreground shadow-sm border-l-2 border-l-positive"
@@ -77,9 +93,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       )}
                     >
                       <item.icon className="h-5 w-5 shrink-0" />
-                      {!collapsed && (
-                        <span className="text-[15px] font-medium">{item.name}</span>
-                      )}
+                      <span className={cn("text-[15px] font-medium", collapsed && "lg:hidden")}>
+                        {item.name}
+                      </span>
                     </Link>
                   </li>
                 );
@@ -89,14 +105,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Footer + collapse toggle */}
+      {/* Footer + collapse toggle — desktop only */}
       <div className="border-t border-border px-2 py-3">
-        {!collapsed && (
-          <p className="mb-2 px-2 text-[10px] text-muted-foreground">Multi-Broker Dashboard</p>
-        )}
+        <p className={cn("mb-2 px-2 text-[10px] text-muted-foreground", collapsed && "lg:hidden")}>
+          Multi-Broker Dashboard
+        </p>
         <button
           onClick={onToggle}
-          className="flex w-full items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-white/60 hover:text-foreground"
+          className="hidden w-full items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-white/60 hover:text-foreground lg:flex"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (

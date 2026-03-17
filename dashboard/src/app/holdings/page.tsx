@@ -159,6 +159,22 @@ export default function HoldingsPage() {
   const top3Best = [...holdingsWithMarket].sort((a, b) => b.unrealizedPct - a.unrealizedPct).slice(0, 3);
   const top3Worst = [...holdingsWithMarket].sort((a, b) => a.unrealizedPct - b.unrealizedPct).slice(0, 3);
 
+  // Portfolio-level TIR from all filtered holdings' cash flows
+  const portfolioFlows = holdingsWithMarket.flatMap((h) =>
+    (data.cashFlowsByTicker[h.ticker] || []).map((f) => ({
+      date: new Date(f.date),
+      amount: f.amount,
+    }))
+  );
+  const portfolioTIR =
+    portfolioFlows.length >= 1
+      ? xirr([...portfolioFlows, { date: new Date(), amount: totalMarketValue }])
+      : null;
+
+  // Avg commission as % of total invested
+  const avgCommissionPct =
+    totalCostBasis > 0 ? (data.summary.totalCommission / totalCostBasis) * 100 : 0;
+
   /* ── Chart data ──────────────────────────────── */
 
   const chartData = [...holdingsWithMarket]
@@ -396,11 +412,25 @@ export default function HoldingsPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          title="Unrealized P&L"
-          value={formatCurrency(totalUnrealizedPnl)}
-          trend={{ value: formatPercent(totalUnrealizedPct), positive: totalUnrealizedPnl >= 0 }}
-        />
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs font-medium text-muted-foreground">Unrealized P&amp;L</p>
+            <p className={cn("mt-0.5 text-2xl font-bold", totalUnrealizedPnl >= 0 ? "text-positive" : "text-negative")}>
+              {formatCurrency(totalUnrealizedPnl)}
+            </p>
+            <p className={cn("text-xs", totalUnrealizedPct >= 0 ? "text-positive" : "text-negative")}>
+              {formatPercent(totalUnrealizedPct)}
+            </p>
+            {portfolioTIR != null && (
+              <div className="mt-2 border-t border-border/40 pt-2">
+                <p className="text-[10px] text-muted-foreground">TIR (XIRR)</p>
+                <p className={cn("text-sm font-semibold", portfolioTIR >= 0 ? "text-positive" : "text-negative")}>
+                  {formatPercent(portfolioTIR * 100)}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="p-4">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Top 3 Best</p>
@@ -428,7 +458,7 @@ export default function HoldingsPage() {
         <MetricCard
           title="Commissions Paid"
           value={formatCurrency(data.summary.totalCommission)}
-          subtitle={`across ${data.summary.totalPositions} positions`}
+          subtitle={`avg ${avgCommissionPct.toFixed(2)}% of invested`}
         />
       </div>
 
