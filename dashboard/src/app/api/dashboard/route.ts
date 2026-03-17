@@ -107,11 +107,16 @@ export async function GET() {
 
   // --- UNINVESTED CASH BALANCES ---
   // Sum of manually-tracked cash sitting in brokers not yet invested.
-  // Included in XIRR terminal value so the return isn't understated.
-  const cashBalResult = (await db.execute(
-    `SELECT COALESCE(SUM(amount_eur), 0) as total FROM cash_balances`
-  )).rows[0] as unknown as CashBalRow;
-  const cashBalance = cashBalResult?.total ?? 0;
+  // Table may not exist yet in older Turso instances — default to 0.
+  let cashBalance = 0;
+  try {
+    const cashBalResult = (await db.execute(
+      `SELECT COALESCE(SUM(amount_eur), 0) as total FROM cash_balances`
+    )).rows[0] as unknown as CashBalRow;
+    cashBalance = cashBalResult?.total ?? 0;
+  } catch {
+    // cash_balances table not yet created in this Turso instance
+  }
 
   // --- BROKER DISTRIBUTION ---
   const byBroker = (await db.execute(`
