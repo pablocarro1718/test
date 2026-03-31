@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatPercent } from "@/lib/format";
+import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { xirr } from "@/lib/xirr";
 import { cn } from "@/lib/utils";
 import {
@@ -94,7 +94,7 @@ function PieTooltipContent({ active, payload }: { active?: boolean; payload?: Ar
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-sm">
       <p className="font-mono font-semibold">{d.name}</p>
       <p className="text-muted-foreground">{formatCurrency(d.value)}</p>
-      <p className="font-medium">{d.payload.pct.toFixed(1)}%</p>
+      <p className="font-medium">{formatNumber(d.payload.pct, 1)}%</p>
     </div>
   );
 }
@@ -242,7 +242,7 @@ export default function DashboardPage() {
                 Portfolio Value
               </p>
               <p className="mt-1 text-4xl font-bold tracking-tight">
-                {formatCurrency(marketValue)}
+                {formatCurrency(marketValue, 0)}
               </p>
               <div className="mt-1.5 flex items-center gap-2">
                 <span
@@ -256,7 +256,7 @@ export default function DashboardPage() {
                   ) : (
                     <ArrowDownRight className="h-4 w-4" />
                   )}
-                  {formatCurrency(Math.abs(unrealizedPnl))} (
+                  {formatCurrency(Math.abs(unrealizedPnl), 0)} (
                   {formatPercent(unrealizedPct)})
                 </span>
                 <span className="text-xs text-muted-foreground">
@@ -267,14 +267,14 @@ export default function DashboardPage() {
                 <span>
                   Cost Basis:{" "}
                   <span className="font-medium text-foreground">
-                    {formatCurrency(data.openCostBasis)}
+                    {formatCurrency(data.openCostBasis, 0)}
                   </span>
                 </span>
                 <span className="text-border">·</span>
                 <span>
                   Total Invested:{" "}
                   <span className="font-medium text-foreground">
-                    {formatCurrency(data.allTime.totalInvested)}
+                    {formatCurrency(data.allTime.totalInvested, 0)}
                   </span>
                 </span>
                 <span className="text-border">·</span>
@@ -463,7 +463,7 @@ export default function DashboardPage() {
                   <span className="text-xs text-muted-foreground">
                     {a.type}{" "}
                     <span className="font-medium text-foreground">
-                      {a.pct.toFixed(1)}%
+                      {formatNumber(a.pct, 1)}%
                     </span>
                   </span>
                 </div>
@@ -522,10 +522,10 @@ export default function DashboardPage() {
                           </div>
                         </td>
                         <td className="py-1 text-right tabular-nums text-muted-foreground">
-                          {entry.pct.toFixed(1)}%
+                          {formatNumber(entry.pct, 1)}%
                         </td>
                         <td className="py-1 text-right font-mono tabular-nums text-muted-foreground">
-                          {formatCurrency(entry.value)}
+                          {formatCurrency(entry.value, 0)}
                         </td>
                       </tr>
                     ))}

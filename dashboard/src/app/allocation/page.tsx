@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatCurrency, formatPercent } from "@/lib/format";
+import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import {
   PieChart,
   Pie,
@@ -84,7 +84,7 @@ function AllocationSection({
                     fontSize: "12px",
                   }}
                   formatter={(value) => [
-                    formatCurrency(Number(value)),
+                    formatCurrency(Number(value), 0),
                     undefined,
                   ]}
                 />
@@ -106,7 +106,7 @@ function AllocationSection({
                     {formatCurrency(item.value, 0)}
                   </span>
                   <span className="text-xs text-muted-foreground w-12 text-right">
-                    {item.percent.toFixed(1)}%
+                    {formatNumber(item.percent, 1)}%
                   </span>
                 </div>
               </div>
@@ -162,13 +162,13 @@ export default function AllocationPage() {
           value={data.topConcentration?.ticker || "-"}
           subtitle={
             data.topConcentration
-              ? formatCurrency(data.topConcentration.costBasis)
+              ? formatCurrency(data.topConcentration.costBasis, 0)
               : undefined
           }
         />
         <MetricCard
           title="Crypto Weight"
-          value={`${cryptoPercent.toFixed(1)}%`}
+          value={`${formatNumber(cryptoPercent, 1)}%`}
           subtitle="Of total portfolio"
         />
         <MetricCard

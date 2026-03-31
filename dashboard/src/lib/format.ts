@@ -8,8 +8,11 @@ export function formatCurrency(value: number, decimals = 2): string {
 }
 
 export function formatPercent(value: number, decimals = 2): string {
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(decimals)}%`;
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${new Intl.NumberFormat("es-ES", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value)}%`;
 }
 
 export function formatNumber(value: number, decimals = 2): string {

@@ -257,7 +257,7 @@ export default function HoldingsPage() {
       align: "right",
       footer: "sum",
       getValue: (r) => r.weight,
-      render: (r) => <span className="text-sm">{r.weight.toFixed(1)}%</span>,
+      render: (r) => <span className="text-sm">{formatNumber(r.weight, 1)}%</span>,
     },
     {
       key: "tir",
@@ -416,7 +416,7 @@ export default function HoldingsPage() {
           <CardContent className="p-4">
             <p className="text-xs font-medium text-muted-foreground">Unrealized P&amp;L</p>
             <p className={cn("mt-0.5 text-2xl font-bold", totalUnrealizedPnl >= 0 ? "text-positive" : "text-negative")}>
-              {formatCurrency(totalUnrealizedPnl)}
+              {formatCurrency(totalUnrealizedPnl, 0)}
             </p>
             <p className={cn("text-xs", totalUnrealizedPct >= 0 ? "text-positive" : "text-negative")}>
               {formatPercent(totalUnrealizedPct)}
@@ -458,7 +458,7 @@ export default function HoldingsPage() {
         <MetricCard
           title="Commissions Paid"
           value={formatCurrency(data.summary.totalCommission)}
-          subtitle={`avg ${avgCommissionPct.toFixed(2)}% of invested`}
+          subtitle={`avg ${formatNumber(avgCommissionPct, 2)}% of invested`}
         />
       </div>
 

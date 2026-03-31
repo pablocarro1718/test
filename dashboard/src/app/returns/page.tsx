@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatPercent } from "@/lib/format";
+import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { DataTable, ColumnDef } from "@/components/data-table";
 import { xirr } from "@/lib/xirr";
 import { cn } from "@/lib/utils";
@@ -188,7 +188,7 @@ export default function ReturnsPage() {
         />
         <MetricCard
           title="Realized P&L"
-          value={formatCurrency(data.totalRealizedPnl)}
+          value={formatCurrency(data.totalRealizedPnl, 0)}
           trend={{
             value:
               data.winnersCount + data.losersCount > 0
@@ -199,12 +199,12 @@ export default function ReturnsPage() {
         />
         <MetricCard
           title="Win Rate"
-          value={`${data.winRate.toFixed(0)}%`}
+          value={`${formatNumber(data.winRate, 0)}%`}
           subtitle={`${data.winnersCount + data.losersCount} closed trades`}
         />
         <MetricCard
           title="Total Dividends"
-          value={formatCurrency(data.totalDividends)}
+          value={formatCurrency(data.totalDividends, 0)}
           subtitle="All time"
         />
       </div>

@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatPercent } from "@/lib/format";
+import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import {
   BarChart,
   Bar,
@@ -88,7 +88,7 @@ export default function PerformancePage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Realized P&L"
-          value={formatCurrency(data.totalRealizedPnl)}
+          value={formatCurrency(data.totalRealizedPnl, 0)}
           trend={{
             value: formatPercent(
               data.totalRealizedPnl >= 0 ? data.winRate : -data.winRate
@@ -99,7 +99,7 @@ export default function PerformancePage() {
         />
         <MetricCard
           title="Win Rate"
-          value={`${data.winRate.toFixed(0)}%`}
+          value={`${formatNumber(data.winRate, 0)}%`}
           subtitle={`${data.closedTrades.filter((t) => t.pnl > 0).length}W / ${data.closedTrades.filter((t) => t.pnl < 0).length}L`}
         />
         <MetricCard
@@ -108,7 +108,7 @@ export default function PerformancePage() {
           trend={
             data.bestTrade
               ? {
-                  value: formatCurrency(data.bestTrade.pnl),
+                  value: formatCurrency(data.bestTrade.pnl, 0),
                   positive: true,
                 }
               : undefined
@@ -116,7 +116,7 @@ export default function PerformancePage() {
         />
         <MetricCard
           title="Total Dividends"
-          value={formatCurrency(data.totalDividends)}
+          value={formatCurrency(data.totalDividends, 0)}
           subtitle={`${data.dividendsByMonth.length} months with income`}
         />
       </div>

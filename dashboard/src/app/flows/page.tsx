@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DataTable, ColumnDef } from "@/components/data-table";
 import {
@@ -87,20 +87,20 @@ export default function FlowsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <MetricCard
           title="Total Deposited"
-          value={formatCurrency(data.totalDeposited)}
+          value={formatCurrency(data.totalDeposited, 0)}
           subtitle="All time"
         />
         <MetricCard
           title="Total Withdrawn"
-          value={formatCurrency(data.totalWithdrawn)}
+          value={formatCurrency(data.totalWithdrawn, 0)}
           subtitle="Returned to bank"
         />
         <MetricCard
           title="Net Deployed"
-          value={formatCurrency(data.netDeployed)}
+          value={formatCurrency(data.netDeployed, 0)}
           trend={{
             value: data.totalDeposited > 0
-              ? `${((data.totalWithdrawn / data.totalDeposited) * 100).toFixed(0)}% returned`
+              ? `${formatNumber((data.totalWithdrawn / data.totalDeposited) * 100, 0)}% returned`
               : "—",
             positive: data.netDeployed >= 0,
           }}
