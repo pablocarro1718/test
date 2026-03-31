@@ -45,6 +45,7 @@ interface DashboardData {
   externalValue: number;
   externalPositions: Array<{ platform: string; description: string; value_eur: number }>;
   allocation: Array<{ assetType: string; costBasis: number }>;
+  byGeography: Array<{ name: string; value: number; percent: number }>;
   topHoldings: Array<{
     ticker: string;
     name: string;
@@ -84,6 +85,16 @@ const PIE_COLORS = [
   "#06b6d4", "#f97316", "#84cc16", "#ec4899", "#6366f1",
   "#14b8a6", "#a855f7", "#f43f5e", "#22c55e", "#0ea5e9",
 ];
+
+const GEO_COLORS: Record<string, string> = {
+  "North America": "#3b82f6",
+  "Europe":        "#10b981",
+  "Asia":          "#ef4444",
+  "Latam":         "#8b5cf6",
+  "Crypto":        "#f59e0b",
+  "Global":        "#6b7280",
+  "Other":         "#9ca3af",
+};
 
 /* ── Custom pie tooltip ─────────────────────────────── */
 
@@ -536,6 +547,81 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Geography Breakdown ──────────────────── */}
+      {data.byGeography.length > 0 && (
+        <Card>
+          <CardContent className="p-5">
+            <p className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Geographic Exposure
+            </p>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-8">
+              {/* Donut chart */}
+              <div className="h-[160px] w-full sm:w-[160px] sm:shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={data.byGeography}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={44}
+                      outerRadius={70}
+                      paddingAngle={2}
+                      dataKey="value"
+                      isAnimationActive={false}
+                    >
+                      {data.byGeography.map((entry) => (
+                        <Cell
+                          key={entry.name}
+                          fill={GEO_COLORS[entry.name] ?? "#9ca3af"}
+                          stroke="transparent"
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v: unknown) => [formatCurrency(v as number, 0), undefined]}
+                      contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)", fontSize: "12px" }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Legend table */}
+              <div className="flex-1">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground">
+                      <th className="pb-1.5 text-left font-medium">Region</th>
+                      <th className="pb-1.5 text-right font-medium">%</th>
+                      <th className="pb-1.5 text-right font-medium">Cost Basis</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.byGeography.map((entry) => (
+                      <tr key={entry.name} className="border-t border-border/40">
+                        <td className="py-1.5">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="h-2.5 w-2.5 shrink-0 rounded-full"
+                              style={{ backgroundColor: GEO_COLORS[entry.name] ?? "#9ca3af" }}
+                            />
+                            <span className="font-medium">{entry.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums text-muted-foreground">
+                          {formatNumber(entry.percent, 1)}%
+                        </td>
+                        <td className="py-1.5 text-right font-mono tabular-nums text-muted-foreground">
+                          {formatCurrency(entry.value, 0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -3,6 +3,31 @@ import { getDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Geography classification for known tickers that can't be inferred from currency alone.
+ * Add new entries here when buying ETFs with non-obvious geographic exposure
+ * or stocks listed in USD but domiciled outside North America.
+ */
+const TICKER_REGION: Record<string, string> = {
+  // Europe ETFs / European stocks in USD
+  IEV: "Europe",
+  // Latin America
+  ARGT: "Latam", MELI: "Latam", NU: "Latam",
+  // Asia / China
+  BABA: "Asia", TCEHY: "Asia",
+  // Global / thematic (no single geography)
+  URA: "Global",
+};
+
+function classifyRegion(ticker: string, currency: string, assetType: string): string {
+  if (TICKER_REGION[ticker]) return TICKER_REGION[ticker];
+  if (assetType === "Crypto") return "Crypto";
+  if (currency === "EUR" || currency === "GBP") return "Europe";
+  if (currency === "CAD") return "North America";
+  // Default USD stocks/ETFs → North America
+  return "North America";
+}
+
 type OpenRow = {
   ticker: string; name: string | null; asset_type: string | null;
   currency: string | null; net_qty: number; total_cost: number; total_qty_buy: number;
@@ -93,6 +118,22 @@ export async function GET() {
     .map(([assetType, costBasis]) => ({ assetType, costBasis }))
     .sort((a, b) => b.costBasis - a.costBasis);
 
+  // --- ALLOCATION BY GEOGRAPHY ---
+  const geoMap = holdings.reduce((acc, h) => {
+    const region = classifyRegion(h.ticker, h.currency, h.assetType);
+    acc[region] = (acc[region] || 0) + h.costBasis;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const geoTotal = Object.values(geoMap).reduce((s, v) => s + v, 0);
+  const byGeography = Object.entries(geoMap)
+    .map(([name, value]) => ({
+      name,
+      value,
+      percent: geoTotal > 0 ? (value / geoTotal) * 100 : 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+
   // --- MONTHLY PULSE (last 6 months) ---
   const monthlyPulse = (await db.execute(`
     SELECT strftime('%Y-%m', date) as month,
@@ -159,6 +200,7 @@ export async function GET() {
     },
     xirrFlows,
     allocation,
+    byGeography,
     topHoldings: holdings.slice(0, 5),
     monthlyPulse,
     byBroker,
