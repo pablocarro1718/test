@@ -238,6 +238,15 @@ export default function DashboardPage() {
     ...externalPieEntries,
   ].sort((a, b) => b.value - a.value);
 
+  // Daily portfolio change (sum of price move × quantity for each holding)
+  const dailyChange = data.holdings.reduce((sum, h) => {
+    const p = prices?.prices[h.ticker];
+    if (!p || !p.changePercent) return sum;
+    return sum + (p.priceEur * h.quantity * p.changePercent) / 100;
+  }, 0);
+  const prevMarketValue = marketValue - dailyChange;
+  const dailyChangePct = prevMarketValue > 0 ? (dailyChange / prevMarketValue) * 100 : 0;
+
   // Is weekend?
   const dayOfWeek = new Date().getDay();
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
@@ -247,101 +256,107 @@ export default function DashboardPage() {
       {/* ── Hero Card ────────────────────────────── */}
       <Card>
         <CardContent className="p-6">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-start justify-between gap-6">
+            <div className="flex-1 min-w-0">
+
+              {/* Label */}
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Portfolio Value
               </p>
-              <p className="mt-1 text-4xl font-bold tracking-tight">
+
+              {/* Big number */}
+              <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums">
                 {formatCurrency(marketValue, 0)}
               </p>
-              <div className="mt-1.5 flex items-center gap-2">
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-0.5 text-sm font-semibold",
+
+              {/* Daily change + Unrealized side by side */}
+              <div className="mt-4 flex items-stretch gap-5">
+                {/* Today */}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    {isWeekend ? "Último día" : "Hoy"}
+                  </p>
+                  <div className={cn(
+                    "inline-flex items-center gap-1 text-sm font-semibold",
+                    dailyChange >= 0 ? "text-positive" : "text-negative"
+                  )}>
+                    {dailyChange >= 0
+                      ? <ArrowUpRight className="h-4 w-4 shrink-0" />
+                      : <ArrowDownRight className="h-4 w-4 shrink-0" />}
+                    {formatCurrency(Math.abs(dailyChange), 0)}
+                    <span className="text-xs font-medium opacity-80">
+                      ({formatPercent(dailyChangePct)})
+                    </span>
+                  </div>
+                </div>
+
+                <div className="w-px bg-border/60" />
+
+                {/* Unrealized total */}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                    Total no realizado
+                  </p>
+                  <div className={cn(
+                    "inline-flex items-center gap-1 text-sm font-semibold",
                     unrealizedPnl >= 0 ? "text-positive" : "text-negative"
-                  )}
-                >
-                  {unrealizedPnl >= 0 ? (
-                    <ArrowUpRight className="h-4 w-4" />
-                  ) : (
-                    <ArrowDownRight className="h-4 w-4" />
-                  )}
-                  {formatCurrency(Math.abs(unrealizedPnl), 0)} (
-                  {formatPercent(unrealizedPct)})
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  unrealized
-                </span>
+                  )}>
+                    {unrealizedPnl >= 0
+                      ? <ArrowUpRight className="h-4 w-4 shrink-0" />
+                      : <ArrowDownRight className="h-4 w-4 shrink-0" />}
+                    {formatCurrency(Math.abs(unrealizedPnl), 0)}
+                    <span className="text-xs font-medium opacity-80">
+                      ({formatPercent(unrealizedPct)})
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+
+              {/* Secondary metadata */}
+              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>
                   Cost Basis:{" "}
                   <span className="font-medium text-foreground">
                     {formatCurrency(data.openCostBasis, 0)}
                   </span>
                 </span>
-                <span className="text-border">·</span>
-                <span>
-                  Total Invested:{" "}
-                  <span className="font-medium text-foreground">
-                    {formatCurrency(data.allTime.totalInvested, 0)}
-                  </span>
-                </span>
-                <span className="text-border">·</span>
+                <span className="text-border select-none">·</span>
                 <span>
                   XIRR:{" "}
-                  <span
-                    className={cn(
-                      "font-medium",
-                      xirrResult !== null && xirrResult >= 0
-                        ? "text-positive"
-                        : xirrResult !== null
-                          ? "text-negative"
-                          : "text-foreground"
-                    )}
-                  >
-                    {xirrResult !== null
-                      ? formatPercent(xirrResult * 100)
-                      : "N/A"}
+                  <span className={cn(
+                    "font-medium",
+                    xirrResult !== null && xirrResult >= 0 ? "text-positive"
+                      : xirrResult !== null ? "text-negative"
+                      : "text-foreground"
+                  )}>
+                    {xirrResult !== null ? formatPercent(xirrResult * 100) : "N/A"}
                   </span>
                 </span>
+                <span className="text-border select-none">·</span>
+                <span>
+                  <span className="font-medium text-foreground">{data.positionsCount}</span>{" "}
+                  posiciones abiertas
+                </span>
               </div>
+
             </div>
+
             {/* Sparkline */}
             {sparkData.length > 1 && (
-              <div className="ml-4 h-[50px] w-[140px]">
+              <div className="h-[80px] w-[160px] shrink-0 self-center">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={sparkData}>
                     <defs>
-                      <linearGradient
-                        id="sparkGrad"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor={
-                            unrealizedPnl >= 0 ? "#16a34a" : "#dc2626"
-                          }
-                          stopOpacity={0.3}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor={
-                            unrealizedPnl >= 0 ? "#16a34a" : "#dc2626"
-                          }
-                          stopOpacity={0}
-                        />
+                      <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={unrealizedPnl >= 0 ? "#16a34a" : "#dc2626"} stopOpacity={0.25} />
+                        <stop offset="100%" stopColor={unrealizedPnl >= 0 ? "#16a34a" : "#dc2626"} stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <Area
                       type="monotone"
                       dataKey="value"
                       stroke={unrealizedPnl >= 0 ? "#16a34a" : "#dc2626"}
-                      strokeWidth={1.5}
+                      strokeWidth={2}
                       fill="url(#sparkGrad)"
                       dot={false}
                       isAnimationActive={false}
