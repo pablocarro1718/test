@@ -7,8 +7,6 @@ import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { xirr } from "@/lib/xirr";
 import { cn } from "@/lib/utils";
 import {
-  AreaChart,
-  Area,
   PieChart,
   Pie,
   Cell,
@@ -166,16 +164,6 @@ export default function DashboardPage() {
   ];
   const xirrResult = xirr(xirrFlowsDated);
 
-  // Sparkline data: build cumulative flow from monthlyPulse
-  let cumulative = data.openCostBasis;
-  const sparkData = data.monthlyPulse.map((m) => {
-    cumulative += m.netChange;
-    return { month: m.month, value: cumulative };
-  });
-  if (sparkData.length > 0) {
-    sparkData.push({ month: "now", value: marketValue });
-  }
-
   // Today's movers: sort holdings by changePercent
   const movers = data.holdings
     .map((h) => {
@@ -256,116 +244,91 @@ export default function DashboardPage() {
       {/* ── Hero Card ────────────────────────────── */}
       <Card>
         <CardContent className="p-6">
-          <div className="flex items-start justify-between gap-6">
-            <div className="flex-1 min-w-0">
 
-              {/* Label */}
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Portfolio Value
+          {/* Label */}
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            Portfolio Value
+          </p>
+
+          {/* Big number */}
+          <p className="mt-1 text-5xl font-bold tracking-tight tabular-nums">
+            {formatCurrency(marketValue, 0)}
+          </p>
+
+          {/* Daily change + Unrealized — full width, equal columns */}
+          <div className="mt-5 grid grid-cols-2 gap-px bg-border/40 rounded-xl overflow-hidden sm:grid-cols-2">
+            {/* Today */}
+            <div className="bg-card px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                {isWeekend ? "Último día" : "Hoy"}
               </p>
-
-              {/* Big number */}
-              <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums">
-                {formatCurrency(marketValue, 0)}
+              <div className={cn(
+                "flex items-center gap-1.5 text-xl font-bold tabular-nums",
+                dailyChange >= 0 ? "text-positive" : "text-negative"
+              )}>
+                {dailyChange >= 0
+                  ? <ArrowUpRight className="h-5 w-5 shrink-0" />
+                  : <ArrowDownRight className="h-5 w-5 shrink-0" />}
+                {formatCurrency(Math.abs(dailyChange), 0)}
+              </div>
+              <p className={cn(
+                "mt-0.5 text-sm font-medium",
+                dailyChange >= 0 ? "text-positive" : "text-negative"
+              )}>
+                {formatPercent(dailyChangePct)}
               </p>
-
-              {/* Daily change + Unrealized side by side */}
-              <div className="mt-4 flex items-stretch gap-5">
-                {/* Today */}
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    {isWeekend ? "Último día" : "Hoy"}
-                  </p>
-                  <div className={cn(
-                    "inline-flex items-center gap-1 text-sm font-semibold",
-                    dailyChange >= 0 ? "text-positive" : "text-negative"
-                  )}>
-                    {dailyChange >= 0
-                      ? <ArrowUpRight className="h-4 w-4 shrink-0" />
-                      : <ArrowDownRight className="h-4 w-4 shrink-0" />}
-                    {formatCurrency(Math.abs(dailyChange), 0)}
-                    <span className="text-xs font-medium opacity-80">
-                      ({formatPercent(dailyChangePct)})
-                    </span>
-                  </div>
-                </div>
-
-                <div className="w-px bg-border/60" />
-
-                {/* Unrealized total */}
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Total no realizado
-                  </p>
-                  <div className={cn(
-                    "inline-flex items-center gap-1 text-sm font-semibold",
-                    unrealizedPnl >= 0 ? "text-positive" : "text-negative"
-                  )}>
-                    {unrealizedPnl >= 0
-                      ? <ArrowUpRight className="h-4 w-4 shrink-0" />
-                      : <ArrowDownRight className="h-4 w-4 shrink-0" />}
-                    {formatCurrency(Math.abs(unrealizedPnl), 0)}
-                    <span className="text-xs font-medium opacity-80">
-                      ({formatPercent(unrealizedPct)})
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Secondary metadata */}
-              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                <span>
-                  Cost Basis:{" "}
-                  <span className="font-medium text-foreground">
-                    {formatCurrency(data.openCostBasis, 0)}
-                  </span>
-                </span>
-                <span className="text-border select-none">·</span>
-                <span>
-                  XIRR:{" "}
-                  <span className={cn(
-                    "font-medium",
-                    xirrResult !== null && xirrResult >= 0 ? "text-positive"
-                      : xirrResult !== null ? "text-negative"
-                      : "text-foreground"
-                  )}>
-                    {xirrResult !== null ? formatPercent(xirrResult * 100) : "N/A"}
-                  </span>
-                </span>
-                <span className="text-border select-none">·</span>
-                <span>
-                  <span className="font-medium text-foreground">{data.positionsCount}</span>{" "}
-                  posiciones abiertas
-                </span>
-              </div>
-
             </div>
 
-            {/* Sparkline */}
-            {sparkData.length > 1 && (
-              <div className="h-[80px] w-[160px] shrink-0 self-center">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={sparkData}>
-                    <defs>
-                      <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={unrealizedPnl >= 0 ? "#16a34a" : "#dc2626"} stopOpacity={0.25} />
-                        <stop offset="100%" stopColor={unrealizedPnl >= 0 ? "#16a34a" : "#dc2626"} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke={unrealizedPnl >= 0 ? "#16a34a" : "#dc2626"}
-                      strokeWidth={2}
-                      fill="url(#sparkGrad)"
-                      dot={false}
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+            {/* Unrealized total */}
+            <div className="bg-card px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                Total no realizado
+              </p>
+              <div className={cn(
+                "flex items-center gap-1.5 text-xl font-bold tabular-nums",
+                unrealizedPnl >= 0 ? "text-positive" : "text-negative"
+              )}>
+                {unrealizedPnl >= 0
+                  ? <ArrowUpRight className="h-5 w-5 shrink-0" />
+                  : <ArrowDownRight className="h-5 w-5 shrink-0" />}
+                {formatCurrency(Math.abs(unrealizedPnl), 0)}
               </div>
-            )}
+              <p className={cn(
+                "mt-0.5 text-sm font-medium",
+                unrealizedPnl >= 0 ? "text-positive" : "text-negative"
+              )}>
+                {formatPercent(unrealizedPct)}
+              </p>
+            </div>
           </div>
+
+          {/* Secondary metadata */}
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span>
+              Cost Basis:{" "}
+              <span className="font-medium text-foreground">
+                {formatCurrency(data.openCostBasis, 0)}
+              </span>
+            </span>
+            <span className="text-border select-none">·</span>
+            <span>
+              XIRR:{" "}
+              <span className={cn(
+                "font-medium",
+                xirrResult !== null && xirrResult >= 0 ? "text-positive"
+                  : xirrResult !== null ? "text-negative"
+                  : "text-foreground"
+              )}>
+                {xirrResult !== null ? formatPercent(xirrResult * 100) : "N/A"}
+              </span>
+            </span>
+            <span className="text-border select-none">·</span>
+            <span>
+              <span className="font-medium text-foreground">{data.positionsCount}</span>{" "}
+              posiciones abiertas
+            </span>
+          </div>
+
         </CardContent>
       </Card>
 
