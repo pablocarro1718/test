@@ -6,98 +6,118 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const db = getDb();
 
-  // --- XIRR FLOWS ---
-  type CfRow = { date: string; flow_type: string; amount_eur: number };
-  const xirrFlows = ((await db.execute(
-    `SELECT date, flow_type, amount_eur FROM cash_flows ORDER BY date`
-  )).rows as unknown as CfRow[]).map((cf) => ({
-    date: cf.date,
-    amount: -cf.amount_eur, // deposits positive in DB → negate = outflow; withdrawals negative in DB → negate = inflow
-  }));
+  // --- CLOSED TRADES (SQL correcto) ---
+  //
+  // Regla universal y determinista: para calcular el coste medio de lo vendido,
+  // solo se usan las compras cuya fecha sea <= la fecha de la última venta del ticker.
+  // Esto evita que recompras posteriores al cierre contaminen el P&L de la posición cerrada.
+  //
+  // Ejemplo: compré MELI en 2020, vendí en 2021 (forzado), recompré en 2023 (aún abierto).
+  // → solo las compras de 2020 entran en el cálculo. Las de 2023 se ignoran aquí.
 
-  // --- MONTHLY CUMULATIVE FLOW ---
-  type MonthlyRow = { month: string; invested: number; sold: number; dividends: number };
-  const monthlyFlow = (await db.execute(`
-    SELECT strftime('%Y-%m', date) as month,
-           SUM(CASE WHEN operation_type = 'BUY' THEN ABS(net_amount_eur) ELSE 0 END) as invested,
-           SUM(CASE WHEN operation_type = 'SELL' THEN net_amount_eur ELSE 0 END) as sold,
-           SUM(CASE WHEN operation_type = 'DIVIDEND' THEN net_amount_eur ELSE 0 END) as dividends
-    FROM operations
-    GROUP BY month
-    ORDER BY month
-  `)).rows as unknown as MonthlyRow[];
+  type ClosedRow = {
+    ticker: string;
+    qty_bought: number;
+    qty_sold: number;
+    cost: number;
+    proceeds: number;
+    firstBuy: string;
+    lastSell: string;
+  };
 
-  let cumInvested = 0, cumSold = 0, cumDividends = 0;
-  const cumulativeData = monthlyFlow.map((m) => {
-    cumInvested += m.invested;
-    cumSold += m.sold;
-    cumDividends += m.dividends;
-    return { month: m.month, invested: m.invested, sold: m.sold, dividends: m.dividends,
-             cumInvested, cumSold, cumDividends, cumNet: cumInvested - cumSold };
-  });
-
-  // --- CLOSED TRADES ---
-  type ClosedRow = { ticker: string; qty_bought: number; qty_sold: number; cost: number; proceeds: number; firstBuy: string; lastSell: string };
-  const realizedByTicker = (await db.execute(`
-    SELECT ticker,
-           SUM(CASE WHEN operation_type = 'BUY' THEN quantity ELSE 0 END) as qty_bought,
-           SUM(CASE WHEN operation_type = 'SELL' THEN quantity ELSE 0 END) as qty_sold,
-           SUM(CASE WHEN operation_type = 'BUY' THEN ABS(net_amount_eur) ELSE 0 END) as cost,
-           SUM(CASE WHEN operation_type = 'SELL' THEN net_amount_eur ELSE 0 END) as proceeds,
-           MIN(CASE WHEN operation_type = 'BUY' THEN date END) as firstBuy,
-           MAX(CASE WHEN operation_type = 'SELL' THEN date END) as lastSell
-    FROM operations
-    WHERE operation_type IN ('BUY', 'SELL')
-    GROUP BY ticker
-    HAVING qty_sold > 0.001
+  const realizedRows = (await db.execute(`
+    WITH last_sell_dates AS (
+      SELECT ticker, MAX(date) AS last_sell_date
+      FROM operations
+      WHERE operation_type = 'SELL'
+      GROUP BY ticker
+    ),
+    sell_stats AS (
+      SELECT ticker,
+             SUM(quantity)        AS qty_sold,
+             SUM(net_amount_eur)  AS proceeds,
+             MIN(date)            AS first_sell,
+             MAX(date)            AS last_sell
+      FROM operations
+      WHERE operation_type = 'SELL'
+      GROUP BY ticker
+    ),
+    buy_stats AS (
+      SELECT o.ticker,
+             SUM(o.quantity)            AS qty_bought,
+             SUM(ABS(o.net_amount_eur)) AS cost,
+             MIN(o.date)                AS first_buy
+      FROM operations o
+      JOIN last_sell_dates ls ON o.ticker = ls.ticker
+      WHERE o.operation_type = 'BUY'
+        AND o.date <= ls.last_sell_date
+      GROUP BY o.ticker
+    )
+    SELECT s.ticker,
+           b.qty_bought,
+           s.qty_sold,
+           b.cost,
+           s.proceeds,
+           b.first_buy  AS firstBuy,
+           s.last_sell  AS lastSell
+    FROM sell_stats s
+    JOIN buy_stats b ON s.ticker = b.ticker
+    WHERE s.qty_sold > 0.001
+    ORDER BY s.last_sell DESC
   `)).rows as unknown as ClosedRow[];
 
-  const closedTrades = realizedByTicker.map((pos) => {
+  const closedTrades = realizedRows.map((pos) => {
     const costPerUnit = pos.cost / pos.qty_bought;
-    const costOfSold = costPerUnit * pos.qty_sold;
-    const pnl = pos.proceeds - costOfSold;
-    const pnlPercent = costOfSold > 0 ? (pnl / costOfSold) * 100 : 0;
+    const costOfSold  = costPerUnit * pos.qty_sold;
+    const pnl         = pos.proceeds - costOfSold;
+    const pnlPercent  = costOfSold > 0 ? (pnl / costOfSold) * 100 : 0;
     const isFullyClosed = pos.qty_bought - pos.qty_sold < 0.001;
-    const diffDays = Math.floor((new Date(pos.lastSell).getTime() - new Date(pos.firstBuy).getTime()) / (1000 * 60 * 60 * 24));
+
+    const diffDays = Math.floor(
+      (new Date(pos.lastSell).getTime() - new Date(pos.firstBuy).getTime()) /
+      (1000 * 60 * 60 * 24)
+    );
     let holdingPeriod = "";
-    if (diffDays < 30) holdingPeriod = `${diffDays}d`;
+    if (diffDays < 30)       holdingPeriod = `${diffDays}d`;
     else if (diffDays < 365) holdingPeriod = `${Math.floor(diffDays / 30)}m`;
     else {
-      const years = Math.floor(diffDays / 365);
+      const years  = Math.floor(diffDays / 365);
       const months = Math.floor((diffDays % 365) / 30);
       holdingPeriod = months > 0 ? `${years}y ${months}m` : `${years}y`;
     }
-    return { ticker: pos.ticker, firstBuy: pos.firstBuy, lastSell: pos.lastSell,
-             costOfSold, proceeds: pos.proceeds, pnl, pnlPercent, isFullyClosed, holdingPeriod };
+
+    return {
+      ticker: pos.ticker,
+      firstBuy: pos.firstBuy,
+      lastSell: pos.lastSell,
+      costOfSold,
+      proceeds: pos.proceeds,
+      pnl,
+      pnlPercent,
+      isFullyClosed,
+      holdingPeriod,
+      holdingDays: diffDays,
+    };
   });
 
   const totalRealizedPnl = closedTrades.reduce((s, t) => s + t.pnl, 0);
-  const winners = closedTrades.filter((t) => t.pnl > 0);
-  const winRate = closedTrades.length > 0 ? (winners.length / closedTrades.length) * 100 : 0;
-
-  // --- HEATMAP DATA ---
-  type HeatRow = { year: number; month: number; netFlow: number };
-  const heatmapData = (await db.execute(`
-    SELECT
-      CAST(strftime('%Y', date) as INTEGER) as year,
-      CAST(strftime('%m', date) as INTEGER) as month,
-      SUM(CASE WHEN operation_type = 'SELL' THEN net_amount_eur ELSE 0 END) -
-      SUM(CASE WHEN operation_type = 'BUY' THEN ABS(net_amount_eur) ELSE 0 END) +
-      SUM(CASE WHEN operation_type = 'DIVIDEND' THEN net_amount_eur ELSE 0 END) as netFlow
-    FROM operations
-    GROUP BY year, month
-    ORDER BY year, month
-  `)).rows as unknown as HeatRow[];
+  const totalCostOfSold  = closedTrades.reduce((s, t) => s + t.costOfSold, 0);
+  const winners          = closedTrades.filter((t) => t.pnl > 0);
+  const winRate          = closedTrades.length > 0
+    ? (winners.length / closedTrades.length) * 100 : 0;
+  const avgHoldingDays   = closedTrades.length > 0
+    ? Math.round(closedTrades.reduce((s, t) => s + t.holdingDays, 0) / closedTrades.length)
+    : 0;
 
   // --- DIVIDENDS BY QUARTER ---
   type DivRow = { year: string; quarter: string; total: number };
   const dividendsByQuarter = (await db.execute(`
     SELECT strftime('%Y', date) as year,
-           CASE WHEN CAST(strftime('%m', date) as INTEGER) BETWEEN 1 AND 3 THEN 'Q1'
-                WHEN CAST(strftime('%m', date) as INTEGER) BETWEEN 4 AND 6 THEN 'Q2'
-                WHEN CAST(strftime('%m', date) as INTEGER) BETWEEN 7 AND 9 THEN 'Q3'
-                ELSE 'Q4' END as quarter,
-           SUM(net_amount_eur) as total
+           CASE WHEN CAST(strftime('%m', date) AS INTEGER) BETWEEN 1 AND 3 THEN 'Q1'
+                WHEN CAST(strftime('%m', date) AS INTEGER) BETWEEN 4 AND 6 THEN 'Q2'
+                WHEN CAST(strftime('%m', date) AS INTEGER) BETWEEN 7 AND 9 THEN 'Q3'
+                ELSE 'Q4' END AS quarter,
+           SUM(net_amount_eur) AS total
     FROM operations
     WHERE operation_type = 'DIVIDEND'
     GROUP BY year, quarter
@@ -107,15 +127,17 @@ export async function GET() {
   const totalDividends = dividendsByQuarter.reduce((s, d) => s + d.total, 0);
 
   return NextResponse.json({
-    xirrFlows,
-    monthlyFlow: cumulativeData,
-    closedTrades: closedTrades.sort((a, b) => new Date(b.lastSell).getTime() - new Date(a.lastSell).getTime()),
+    closedTrades,
     totalRealizedPnl,
+    totalCostOfSold,
     winRate,
     winnersCount: winners.length,
     losersCount: closedTrades.length - winners.length,
+    avgHoldingDays,
     totalDividends,
-    heatmapData,
-    dividendsByQuarter: dividendsByQuarter.map((d) => ({ label: `${d.quarter} ${d.year}`, total: d.total })),
+    dividendsByQuarter: dividendsByQuarter.map((d) => ({
+      label: `${d.quarter} ${d.year}`,
+      total: d.total,
+    })),
   });
 }

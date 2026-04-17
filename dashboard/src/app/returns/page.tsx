@@ -1,444 +1,341 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { DataTable, ColumnDef } from "@/components/data-table";
-import { xirr } from "@/lib/xirr";
 import { cn } from "@/lib/utils";
 import {
-  ComposedChart,
-  Area,
-  Line,
   BarChart,
   Bar,
   XAxis,
   YAxis,
   Tooltip,
+  Cell,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 
 /* ── Types ─────────────────────────────────────────── */
 
+interface ClosedTrade {
+  ticker: string;
+  firstBuy: string;
+  lastSell: string;
+  costOfSold: number;
+  proceeds: number;
+  pnl: number;
+  pnlPercent: number;
+  isFullyClosed: boolean;
+  holdingPeriod: string;
+  holdingDays: number;
+}
+
 interface ReturnsData {
-  xirrFlows: Array<{ date: string; amount: number }>;
-  monthlyFlow: Array<{
-    month: string;
-    invested: number;
-    sold: number;
-    dividends: number;
-    cumInvested: number;
-    cumSold: number;
-    cumDividends: number;
-    cumNet: number;
-  }>;
-  closedTrades: Array<{
-    ticker: string;
-    firstBuy: string;
-    lastSell: string;
-    costOfSold: number;
-    proceeds: number;
-    pnl: number;
-    pnlPercent: number;
-    isFullyClosed: boolean;
-    holdingPeriod: string;
-  }>;
+  closedTrades: ClosedTrade[];
   totalRealizedPnl: number;
+  totalCostOfSold: number;
   winRate: number;
   winnersCount: number;
   losersCount: number;
+  avgHoldingDays: number;
   totalDividends: number;
   dividendsByQuarter: Array<{ label: string; total: number }>;
 }
 
-interface PricesData {
-  prices: Record<
-    string,
-    {
-      price: number;
-      priceEur: number;
-      currency: string;
-      change: number;
-      changePercent: number;
-    }
-  >;
-}
+/* ── Helpers ─────────────────────────────────────────── */
 
-interface DashboardData {
-  holdings: Array<{
-    ticker: string;
-    quantity: number;
-    costBasis: number;
-  }>;
-  cashBalance: number;
-}
-
-/* ── Constants ──────────────────────────────────────── */
-
-const TIME_RANGES = ["1M", "3M", "6M", "1Y", "All"] as const;
-type TimeRange = (typeof TIME_RANGES)[number];
-
-const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-/* ── Helpers ────────────────────────────────────────── */
-
-function getMonthsBack(range: TimeRange): number {
-  switch (range) {
-    case "1M": return 1;
-    case "3M": return 3;
-    case "6M": return 6;
-    case "1Y": return 12;
-    case "All": return 999;
-  }
+function formatHoldingDays(days: number): string {
+  if (days < 30)       return `${days}d`;
+  if (days < 365)      return `${Math.floor(days / 30)} meses`;
+  const years  = Math.floor(days / 365);
+  const months = Math.floor((days % 365) / 30);
+  return months > 0 ? `${years}a ${months}m` : `${years} año${years > 1 ? "s" : ""}`;
 }
 
 /* ── Component ──────────────────────────────────────── */
 
 export default function ReturnsPage() {
   const [data, setData] = useState<ReturnsData | null>(null);
-  const [prices, setPrices] = useState<PricesData | null>(null);
-  const [dashData, setDashData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState<TimeRange>("All");
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/returns").then((r) => r.json()),
-      fetch("/api/prices").then((r) => r.json()),
-      fetch("/api/dashboard").then((r) => r.json()),
-    ])
-      .then(([returnsData, pricesData, dash]) => {
-        setData(returnsData);
-        setPrices(pricesData);
-        setDashData(dash);
-      })
+    fetch("/api/returns")
+      .then((r) => r.json())
+      .then(setData)
       .finally(() => setLoading(false));
   }, []);
-
-  // XIRR calculation: terminal value = market value of holdings + uninvested cash
-  const xirrResult = useMemo(() => {
-    if (!data || !dashData) return null;
-
-    let priceMissing = 0;
-    const holdingsValue = dashData.holdings.reduce((sum, h) => {
-      const p = prices?.prices[h.ticker];
-      if (!p) priceMissing++;
-      // If price unavailable, fall back to cost basis (assumes no P&L on that holding)
-      return sum + (p ? p.priceEur * h.quantity : h.costBasis);
-    }, 0);
-
-    // Include uninvested cash sitting in brokers (tracked in cash_balances table)
-    const terminalValue = holdingsValue + (dashData.cashBalance ?? 0);
-    if (terminalValue <= 0) return null;
-
-    const flows = [
-      ...data.xirrFlows.map((f) => ({
-        date: new Date(f.date),
-        amount: f.amount,
-      })),
-      { date: new Date(), amount: terminalValue },
-    ];
-    return { rate: xirr(flows), priceMissing };
-  }, [data, prices, dashData]);
 
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading returns...</div>
+        <div className="text-sm text-muted-foreground">Loading...</div>
       </div>
     );
   }
 
   if (!data) return null;
 
-  /* ── Filtered monthly flow ──────────────────── */
+  const rentabilidad = data.totalCostOfSold > 0
+    ? (data.totalRealizedPnl / data.totalCostOfSold) * 100
+    : 0;
 
-  const monthsBack = getMonthsBack(timeRange);
-  const filteredFlow =
-    timeRange === "All"
-      ? data.monthlyFlow
-      : data.monthlyFlow.slice(-monthsBack);
+  // Bar chart data: sorted best → worst by pnlPercent
+  const barData = [...data.closedTrades].sort((a, b) => b.pnlPercent - a.pnlPercent);
+
+  // Dynamic bar chart height: at least 200px, 40px per trade
+  const barHeight = Math.max(200, barData.length * 44);
+
+  /* ── Column definitions ──────────────────────────── */
+
+  const columns: ColumnDef<ClosedTrade>[] = [
+    {
+      key: "ticker",
+      label: "Ticker",
+      sortable: true,
+      getStringValue: (r) => r.ticker,
+      render: (r) => (
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono font-medium">{r.ticker}</span>
+          {!r.isFullyClosed && (
+            <Badge variant="outline" className="text-[9px] font-normal">
+              partial
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "holdingPeriod",
+      label: "Período",
+      sortable: true,
+      getValue: (r) => r.holdingDays,
+      render: (r) => (
+        <span className="text-sm text-muted-foreground">{r.holdingPeriod}</span>
+      ),
+    },
+    {
+      key: "pnl",
+      label: "P&L",
+      sortable: true,
+      align: "right",
+      footer: "sum",
+      getValue: (r) => r.pnl,
+      render: (r) => (
+        <span
+          className={cn(
+            "font-mono text-sm font-medium",
+            r.pnl >= 0 ? "text-positive" : "text-negative"
+          )}
+        >
+          {formatCurrency(r.pnl)}
+        </span>
+      ),
+    },
+    {
+      key: "pnlPercent",
+      label: "P&L %",
+      sortable: true,
+      align: "right",
+      footer: "avg",
+      getValue: (r) => r.pnlPercent,
+      render: (r) => (
+        <span
+          className={cn(
+            "font-mono text-sm font-semibold",
+            r.pnlPercent >= 0 ? "text-positive" : "text-negative"
+          )}
+        >
+          {formatPercent(r.pnlPercent)}
+        </span>
+      ),
+    },
+    // Secondary columns
+    {
+      key: "costOfSold",
+      label: "Coste",
+      secondary: true,
+      sortable: true,
+      align: "right",
+      footer: "sum",
+      getValue: (r) => r.costOfSold,
+      render: (r) => (
+        <span className="font-mono text-sm">{formatCurrency(r.costOfSold)}</span>
+      ),
+    },
+    {
+      key: "proceeds",
+      label: "Proceeds",
+      secondary: true,
+      sortable: true,
+      align: "right",
+      footer: "sum",
+      getValue: (r) => r.proceeds,
+      render: (r) => (
+        <span className="font-mono text-sm">{formatCurrency(r.proceeds)}</span>
+      ),
+    },
+    {
+      key: "firstBuy",
+      label: "Primera compra",
+      secondary: true,
+      sortable: true,
+      getStringValue: (r) => r.firstBuy,
+      render: (r) => (
+        <span className="tabular-nums text-sm text-muted-foreground">
+          {r.firstBuy}
+        </span>
+      ),
+    },
+    {
+      key: "lastSell",
+      label: "Última venta",
+      secondary: true,
+      sortable: true,
+      getStringValue: (r) => r.lastSell,
+      render: (r) => (
+        <span className="tabular-nums text-sm text-muted-foreground">
+          {r.lastSell}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold font-serif">Returns</h1>
         <p className="text-sm text-muted-foreground">
-          Performance, realized gains, and dividend income
+          Análisis de posiciones cerradas y rentabilidad realizada
         </p>
       </div>
 
-      {/* KPIs */}
+      {/* ── KPIs ─────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          title="XIRR"
-          value={
-            xirrResult?.rate != null ? formatPercent(xirrResult.rate * 100) : "N/A"
-          }
-          subtitle={
-            xirrResult?.priceMissing
-              ? `Annualized return · ${xirrResult.priceMissing} holding${xirrResult.priceMissing > 1 ? "s" : ""} using cost basis`
-              : "Annualized return"
-          }
-        />
-        <MetricCard
-          title="Realized P&L"
+          title="P&L Realizado"
           value={formatCurrency(data.totalRealizedPnl, 0)}
           trend={{
-            value:
-              data.winnersCount + data.losersCount > 0
-                ? `${data.winnersCount}W / ${data.losersCount}L`
-                : "—",
+            value: `${data.winnersCount}G / ${data.losersCount}P`,
             positive: data.totalRealizedPnl >= 0,
           }}
         />
         <MetricCard
-          title="Win Rate"
-          value={`${formatNumber(data.winRate, 0)}%`}
-          subtitle={`${data.winnersCount + data.losersCount} closed trades`}
+          title="Rentabilidad"
+          value={formatPercent(rentabilidad)}
+          subtitle={`sobre ${formatCurrency(data.totalCostOfSold, 0)} invertidos`}
         />
         <MetricCard
-          title="Total Dividends"
-          value={formatCurrency(data.totalDividends, 0)}
-          subtitle="All time"
+          title="Período medio"
+          value={formatHoldingDays(data.avgHoldingDays)}
+          subtitle={`${data.winnersCount + data.losersCount} posiciones cerradas`}
+        />
+        <MetricCard
+          title="Win Rate"
+          value={`${formatNumber(data.winRate, 0)}%`}
+          subtitle={`${data.winnersCount}G · ${data.losersCount}P`}
         />
       </div>
 
-      {/* Portfolio Value Over Time */}
-      <Card>
-        <CardContent className="p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Portfolio Value Over Time
-            </p>
-            <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-              {TIME_RANGES.map((range) => (
-                <button
-                  key={range}
-                  onClick={() => setTimeRange(range)}
-                  className={cn(
-                    "rounded-md px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-                    timeRange === range
-                      ? "bg-card text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {range}
-                </button>
-              ))}
-            </div>
-          </div>
-          {filteredFlow.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No data yet</p>
-          ) : (
-            <div className="h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={filteredFlow}>
-                  <defs>
-                    <linearGradient
-                      id="investedGrad"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop
-                        offset="0%"
-                        stopColor="#9ca3af"
-                        stopOpacity={0.2}
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="#9ca3af"
-                        stopOpacity={0}
-                      />
-                    </linearGradient>
-                  </defs>
-                  <XAxis
-                    dataKey="month"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11, fill: "#6b7280" }}
-                    tickFormatter={(v: string) => {
-                      const [, m] = v.split("-");
-                      return MONTH_LABELS[parseInt(m) - 1] || v;
-                    }}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11, fill: "#6b7280" }}
-                    tickFormatter={(v: number) =>
-                      `€${(v / 1000).toFixed(0)}k`
-                    }
-                    width={50}
-                  />
-                  <Tooltip
-                    formatter={(value: unknown, name: unknown) => [
-                      formatCurrency(value as number),
-                      name === "cumInvested"
-                        ? "Cumulative Invested"
-                        : "Net Capital",
-                    ]}
-                    labelFormatter={(label: unknown) => {
-                      const [y, m] = String(label).split("-");
-                      const months = [
-                        "January", "February", "March", "April",
-                        "May", "June", "July", "August",
-                        "September", "October", "November", "December",
-                      ];
-                      return `${months[parseInt(m) - 1]} ${y}`;
-                    }}
-                    contentStyle={{
-                      borderRadius: "8px",
-                      border: "1px solid #e0dbd3",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="cumInvested"
-                    stroke="#9ca3af"
-                    strokeWidth={1}
-                    fill="url(#investedGrad)"
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="cumNet"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Closed Positions */}
-      {data.closedTrades.length > 0 && (() => {
-        type ClosedTrade = typeof data.closedTrades[0];
-        const closedCols: ColumnDef<ClosedTrade>[] = [
-          {
-            key: "ticker",
-            label: "Ticker",
-            sortable: true,
-            getStringValue: (r) => r.ticker,
-            render: (r) => (
-              <div className="flex items-center gap-1.5">
-                <span className="font-mono font-medium">{r.ticker}</span>
-                {!r.isFullyClosed && <Badge variant="outline" className="text-[9px] font-normal">partial</Badge>}
-              </div>
-            ),
-          },
-          {
-            key: "firstBuy",
-            label: "Buy Date",
-            sortable: true,
-            getStringValue: (r) => r.firstBuy,
-            render: (r) => <span className="tabular-nums text-sm">{r.firstBuy}</span>,
-          },
-          {
-            key: "lastSell",
-            label: "Sell Date",
-            sortable: true,
-            getStringValue: (r) => r.lastSell,
-            render: (r) => <span className="tabular-nums text-sm">{r.lastSell}</span>,
-          },
-          {
-            key: "pnl",
-            label: "P&L",
-            sortable: true,
-            align: "right",
-            footer: "sum",
-            getValue: (r) => r.pnl,
-            render: (r) => (
-              <span className={cn("font-mono text-sm font-medium", r.pnl >= 0 ? "text-positive" : "text-negative")}>
-                {formatCurrency(r.pnl)}
-              </span>
-            ),
-          },
-          {
-            key: "pnlPercent",
-            label: "P&L %",
-            sortable: true,
-            align: "right",
-            footer: "avg",
-            getValue: (r) => r.pnlPercent,
-            render: (r) => (
-              <span className={cn("font-mono text-sm", r.pnlPercent >= 0 ? "text-positive" : "text-negative")}>
-                {formatPercent(r.pnlPercent)}
-              </span>
-            ),
-          },
-          // Secondary
-          {
-            key: "costOfSold",
-            label: "Cost",
-            secondary: true,
-            sortable: true,
-            align: "right",
-            footer: "sum",
-            getValue: (r) => r.costOfSold,
-            render: (r) => <span className="font-mono text-sm">{formatCurrency(r.costOfSold)}</span>,
-          },
-          {
-            key: "proceeds",
-            label: "Proceeds",
-            secondary: true,
-            sortable: true,
-            align: "right",
-            footer: "sum",
-            getValue: (r) => r.proceeds,
-            render: (r) => <span className="font-mono text-sm">{formatCurrency(r.proceeds)}</span>,
-          },
-          {
-            key: "holdingPeriod",
-            label: "Period",
-            secondary: true,
-            sortable: false,
-            align: "right",
-            render: (r) => <span className="text-sm text-muted-foreground">{r.holdingPeriod}</span>,
-          },
-        ];
-        return (
-          <div>
-            <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Closed Positions
-            </p>
-            <DataTable<ClosedTrade>
-              data={data.closedTrades}
-              columns={closedCols}
-              defaultSort={{ key: "lastSell", dir: "desc" }}
-              storageKey="returns-closed"
-              getRowKey={(r, i) => `${r.ticker}-${r.lastSell}-${i}`}
-            />
-          </div>
-        );
-      })()}
-
-      {/* Dividends by Quarter */}
-      {data.dividendsByQuarter.length > 0 && (
+      {/* ── P&L por posición ─────────────────────────── */}
+      {barData.length > 0 && (
         <Card>
           <CardContent className="p-5">
             <p className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Dividends by Quarter
+              P&L por posición (% sobre coste)
             </p>
-            <div className="h-[200px]">
+            <div style={{ height: barHeight }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={data.dividendsByQuarter}
-                  barCategoryGap="25%"
+                  data={barData}
+                  layout="vertical"
+                  margin={{ left: 8, right: 40, top: 4, bottom: 4 }}
                 >
+                  <XAxis
+                    type="number"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11, fill: "#6b7280" }}
+                    tickFormatter={(v: number) => `${v > 0 ? "+" : ""}${formatNumber(v, 0)}%`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="ticker"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 12, fill: "#1a1a1a", fontFamily: "monospace" }}
+                    width={52}
+                  />
+                  <ReferenceLine x={0} stroke="#e5e7eb" strokeWidth={1} />
+                  <Tooltip
+                    cursor={{ fill: "rgba(0,0,0,0.04)" }}
+                    formatter={(value: unknown, _: unknown, props: { payload?: ClosedTrade }) => {
+                      const t = props.payload;
+                      if (!t) return [formatPercent(value as number), "P&L %"];
+                      return [
+                        `${formatPercent(value as number)}  ·  ${formatCurrency(t.pnl)}`,
+                        t.ticker,
+                      ];
+                    }}
+                    labelFormatter={() => ""}
+                    contentStyle={{
+                      borderRadius: "8px",
+                      border: "1px solid var(--border)",
+                      fontSize: "12px",
+                    }}
+                  />
+                  <Bar dataKey="pnlPercent" barSize={18} radius={[0, 4, 4, 0]}>
+                    {barData.map((entry, i) => (
+                      <Cell
+                        key={i}
+                        fill={entry.pnlPercent >= 0 ? "#16a34a" : "#dc2626"}
+                        fillOpacity={0.82}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Tabla de posiciones cerradas ─────────────── */}
+      {data.closedTrades.length > 0 && (
+        <div>
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Detalle de posiciones cerradas
+          </p>
+          <DataTable<ClosedTrade>
+            data={data.closedTrades}
+            columns={columns}
+            defaultSort={{ key: "pnl", dir: "desc" }}
+            storageKey="returns-closed"
+            getRowKey={(r, i) => `${r.ticker}-${r.lastSell}-${i}`}
+          />
+        </div>
+      )}
+
+      {/* ── Dividendos por trimestre ──────────────────── */}
+      {data.dividendsByQuarter.length > 0 && (
+        <Card>
+          <CardContent className="p-5">
+            <div className="mb-4 flex items-baseline justify-between">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Dividendos por trimestre
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Total:{" "}
+                <span className="font-medium text-foreground">
+                  {formatCurrency(data.totalDividends, 0)}
+                </span>
+              </p>
+            </div>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.dividendsByQuarter} barCategoryGap="25%">
                   <XAxis
                     dataKey="label"
                     tickLine={false}
@@ -452,17 +349,17 @@ export default function ReturnsPage() {
                     tickLine={false}
                     axisLine={false}
                     tick={{ fontSize: 11, fill: "#6b7280" }}
-                    tickFormatter={(v: number) => `€${v.toFixed(0)}`}
-                    width={50}
+                    tickFormatter={(v: number) => `€${formatNumber(v, 0)}`}
+                    width={55}
                   />
                   <Tooltip
                     formatter={(value: unknown) => [
                       formatCurrency(value as number),
-                      "Dividends",
+                      "Dividendos",
                     ]}
                     contentStyle={{
                       borderRadius: "8px",
-                      border: "1px solid #e0dbd3",
+                      border: "1px solid var(--border)",
                       fontSize: "12px",
                     }}
                   />
@@ -470,7 +367,7 @@ export default function ReturnsPage() {
                     dataKey="total"
                     fill="#16a34a"
                     radius={[4, 4, 0, 0]}
-                    fillOpacity={0.85}
+                    fillOpacity={0.82}
                   />
                 </BarChart>
               </ResponsiveContainer>
