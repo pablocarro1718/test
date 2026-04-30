@@ -33,9 +33,10 @@ FLEX_REQUEST_URL = "https://gdcdyn.interactivebrokers.com/Universal/servlet/Flex
 FLEX_DOWNLOAD_URL = "https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.GetStatement"
 
 
-def request_flex_statement(token: str, query_id: str) -> str:
+def request_flex_statement(token: str, query_id: str, max_retries: int = 6) -> str:
     """
-    Paso 1: Solicitar el Flex Statement y obtener el Reference Code
+    Paso 1: Solicitar el Flex Statement y obtener el Reference Code.
+    Reintenta hasta max_retries veces en errores transitorios (código 1001).
     """
     params = {
         't': token,
@@ -43,32 +44,40 @@ def request_flex_statement(token: str, query_id: str) -> str:
         'v': '3'
     }
 
-    print(f"📡 Solicitando Flex Query {query_id}...")
-    response = requests.get(FLEX_REQUEST_URL, params=params)
+    for attempt in range(max_retries):
+        print(f"📡 Solicitando Flex Query {query_id} (intento {attempt + 1}/{max_retries})...")
+        response = requests.get(FLEX_REQUEST_URL, params=params)
 
-    print(f"   HTTP {response.status_code} — respuesta ({len(response.text)} chars):")
-    print(f"   {response.text[:500]}")          # Siempre mostrar los primeros 500 chars
+        print(f"   HTTP {response.status_code} — {response.text[:300]}")
 
-    if response.status_code != 200:
-        raise Exception(f"Error HTTP {response.status_code}: {response.text}")
+        if response.status_code != 200:
+            raise Exception(f"Error HTTP {response.status_code}: {response.text}")
 
-    # Parsear respuesta XML
-    root = ET.fromstring(response.text)
+        root = ET.fromstring(response.text)
+        status = root.find('.//Status')
 
-    # Verificar si hay error
-    status = root.find('.//Status')
-    if status is not None and status.text != 'Success':
-        error_code = root.find('.//ErrorCode')
-        error_msg = root.find('.//ErrorMessage')
-        raise Exception(f"Error IBKR [{error_code.text if error_code is not None else 'N/A'}]: {error_msg.text if error_msg is not None else 'Unknown'}")
+        if status is not None and status.text == 'Success':
+            ref_code = root.find('.//ReferenceCode')
+            if ref_code is None:
+                raise Exception(f"No se encontró ReferenceCode: {response.text}")
+            print(f"✅ Reference Code obtenido: {ref_code.text}")
+            return ref_code.text
 
-    # Obtener Reference Code
-    ref_code = root.find('.//ReferenceCode')
-    if ref_code is None:
-        raise Exception(f"No se encontró ReferenceCode en la respuesta: {response.text}")
+        # Error transitorio 1001: IBKR ocupado, reintentar con backoff
+        error_code_el = root.find('.//ErrorCode')
+        error_msg_el  = root.find('.//ErrorMessage')
+        error_code    = error_code_el.text if error_code_el is not None else 'N/A'
+        error_msg     = error_msg_el.text  if error_msg_el  is not None else 'Unknown'
 
-    print(f"✅ Reference Code obtenido: {ref_code.text}")
-    return ref_code.text
+        if error_code == '1001' and attempt < max_retries - 1:
+            wait = 10 * (attempt + 1)   # 10s, 20s, 30s, 40s, 50s
+            print(f"⏳ IBKR ocupado (1001), reintentando en {wait}s...")
+            time.sleep(wait)
+            continue
+
+        raise Exception(f"Error IBKR [{error_code}]: {error_msg}")
+
+    raise Exception("Máximo de reintentos alcanzado en SendRequest")
 
 
 def download_flex_statement(token: str, reference_code: str, max_retries: int = 5) -> str:
