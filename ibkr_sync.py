@@ -46,6 +46,9 @@ def request_flex_statement(token: str, query_id: str) -> str:
     print(f"📡 Solicitando Flex Query {query_id}...")
     response = requests.get(FLEX_REQUEST_URL, params=params)
 
+    print(f"   HTTP {response.status_code} — respuesta ({len(response.text)} chars):")
+    print(f"   {response.text[:500]}")          # Siempre mostrar los primeros 500 chars
+
     if response.status_code != 200:
         raise Exception(f"Error HTTP {response.status_code}: {response.text}")
 

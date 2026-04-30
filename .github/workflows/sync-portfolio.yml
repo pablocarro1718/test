@@ -30,12 +30,14 @@ jobs:
           python -m pip install pandas requests python-dotenv yfinance
 
       - name: Sync IBKR
+        continue-on-error: true          # IBKR token can expire; don't kill the whole pipeline
         env:
           IBKR_TOKEN: ${{ secrets.IBKR_TOKEN }}
           IBKR_QUERY_ID: ${{ secrets.IBKR_QUERY_ID }}
         run: python ibkr_sync.py
 
       - name: Sync Kraken
+        continue-on-error: true
         env:
           KRAKEN_API_KEY: ${{ secrets.KRAKEN_API_KEY }}
           KRAKEN_PRIVATE_KEY: ${{ secrets.KRAKEN_PRIVATE_KEY }}
