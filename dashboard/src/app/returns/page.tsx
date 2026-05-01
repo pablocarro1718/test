@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
+import { formatCurrency, formatNumber, formatPercent, formatDate } from "@/lib/format";
 import { DataTable, ColumnDef } from "@/components/data-table";
 import { cn } from "@/lib/utils";
 import {
@@ -185,7 +185,7 @@ export default function ReturnsPage() {
       getStringValue: (r) => r.firstBuy,
       render: (r) => (
         <span className="tabular-nums text-sm text-muted-foreground">
-          {r.firstBuy}
+          {formatDate(r.firstBuy)}
         </span>
       ),
     },
@@ -197,7 +197,7 @@ export default function ReturnsPage() {
       getStringValue: (r) => r.lastSell,
       render: (r) => (
         <span className="tabular-nums text-sm text-muted-foreground">
-          {r.lastSell}
+          {formatDate(r.lastSell)}
         </span>
       ),
     },

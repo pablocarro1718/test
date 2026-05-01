@@ -28,6 +28,16 @@ export function formatPercent(value: number, decimals = 2): string {
 }
 
 /**
+ * Formats a date string (YYYY-MM-DD) as DD/MM/YYYY.
+ */
+export function formatDate(dateStr: string): string {
+  if (!dateStr) return "—";
+  const [y, m, d] = dateStr.split("-");
+  if (!y || !m || !d) return dateStr;
+  return `${d}/${m}/${y}`;
+}
+
+/**
  * Formats a plain number in Spanish notation: 1.983,45
  */
 export function formatNumber(value: number, decimals = 2): string {

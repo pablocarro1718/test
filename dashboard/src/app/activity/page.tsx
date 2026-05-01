@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { formatCurrency, formatNumber } from "@/lib/format";
+import { formatCurrency, formatNumber, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";
 import { DataTable, ColumnDef } from "@/components/data-table";
@@ -79,7 +79,7 @@ const COLUMNS: ColumnDef<ActivityItem>[] = [
     label: "Date",
     sortable: true,
     getStringValue: (r) => r.date,
-    render: (r) => <span className="tabular-nums text-sm">{r.date}</span>,
+    render: (r) => <span className="tabular-nums text-sm">{formatDate(r.date)}</span>,
   },
   {
     key: "type",

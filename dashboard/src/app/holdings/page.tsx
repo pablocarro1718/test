@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
+import { formatCurrency, formatNumber, formatPercent, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { xirr } from "@/lib/xirr";
 import {
@@ -295,7 +295,7 @@ export default function HoldingsPage() {
       secondary: true,
       sortable: true,
       getStringValue: (r) => r.firstBuy,
-      render: (r) => <span className="text-sm tabular-nums text-muted-foreground">{r.firstBuy || "—"}</span>,
+      render: (r) => <span className="text-sm tabular-nums text-muted-foreground">{formatDate(r.firstBuy)}</span>,
     },
     {
       key: "lastBuy",
