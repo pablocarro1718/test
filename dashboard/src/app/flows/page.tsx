@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatCurrency, formatNumber } from "@/lib/format";
+import { formatCurrency, formatNumber, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DataTable, ColumnDef } from "@/components/data-table";
 import {
@@ -209,7 +209,7 @@ export default function FlowsPage() {
             label: "Date",
             sortable: true,
             getStringValue: (r) => r.date,
-            render: (r) => <span className="tabular-nums text-sm">{r.date}</span>,
+            render: (r) => <span className="tabular-nums text-sm">{formatDate(r.date)}</span>,
           },
           {
             key: "broker",
