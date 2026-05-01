@@ -66,6 +66,8 @@ DEPOSITOS = [
     {'fecha': '2026-02-02', 'broker': 'IBKR', 'cantidad': 25000.00, 'moneda': 'MXN', 'tipo': 'deposit', 'fx_rate': 21.57},
     {'fecha': '2026-02-25', 'broker': 'IBKR', 'cantidad': 1000.00, 'moneda': 'EUR', 'tipo': 'deposit'},
     {'fecha': '2026-03-11', 'broker': 'IBKR', 'cantidad': 1000.00, 'moneda': 'EUR', 'tipo': 'deposit'},
+    # EURMXN 2026-04-16 = 20.35
+    {'fecha': '2026-04-16', 'broker': 'IBKR', 'cantidad': 30000.00, 'moneda': 'MXN', 'tipo': 'deposit', 'fx_rate': 20.35},
 ]
 
 # ============================================================
