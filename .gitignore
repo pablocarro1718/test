@@ -11,8 +11,8 @@ portfolio.db
 
 # Archivos de datos generados localmente
 ibkr_raw_response.txt
-ibkr_transactions.csv
-ibkr_deposits.csv
+# ibkr_transactions.csv y ibkr_deposits.csv SÍ se commitean para que el runner
+# tenga datos de referencia aunque el sync falle (error 1001, token caducado, etc.)
 kraken_transactions.csv
 
 # Python
