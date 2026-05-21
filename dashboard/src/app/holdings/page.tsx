@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatNumber, formatPercent, formatDate } from "@/lib/format";
+import { formatCurrency, formatNumber, formatPercent, formatDate, formatPriceOriginal } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { xirr } from "@/lib/xirr";
 import {
@@ -35,6 +35,7 @@ interface Holding {
   quantity: number;
   costBasis: number;
   avgCostPerUnit: number;
+  avgPriceOriginal: number;
   commission: number;
   firstBuy: string;
   lastBuy: string;
@@ -209,6 +210,7 @@ export default function HoldingsPage() {
     {
       key: "costBasis",
       label: "Cost Basis",
+      removable: true,
       sortable: true,
       align: "right",
       footer: "sum",
@@ -218,6 +220,7 @@ export default function HoldingsPage() {
     {
       key: "marketValue",
       label: "Mkt Value",
+      removable: true,
       sortable: true,
       align: "right",
       footer: "sum",
@@ -227,6 +230,7 @@ export default function HoldingsPage() {
     {
       key: "unrealizedPnl",
       label: "P&L",
+      removable: true,
       sortable: true,
       align: "right",
       footer: "sum",
@@ -240,6 +244,7 @@ export default function HoldingsPage() {
     {
       key: "unrealizedPct",
       label: "P&L %",
+      removable: true,
       sortable: true,
       align: "right",
       footer: "avg",
@@ -253,6 +258,7 @@ export default function HoldingsPage() {
     {
       key: "weight",
       label: "Weight",
+      removable: true,
       sortable: true,
       align: "right",
       footer: "sum",
@@ -281,13 +287,31 @@ export default function HoldingsPage() {
       render: (r) => <span className="font-mono text-sm">{formatNumber(r.quantity, r.quantity < 1 ? 6 : 2)}</span>,
     },
     {
-      key: "avgCostPerUnit",
-      label: "Avg Cost",
+      key: "currentPrice",
+      label: "Price",
       secondary: true,
       sortable: true,
       align: "right",
-      getValue: (r) => r.avgCostPerUnit,
-      render: (r) => <span className="font-mono text-sm">{formatCurrency(r.avgCostPerUnit)}</span>,
+      getValue: (r) => prices?.prices[r.ticker]?.price ?? 0,
+      render: (r) => {
+        const p = prices?.prices[r.ticker];
+        return p
+          ? <span className="font-mono text-sm">{formatPriceOriginal(p.price, p.currency)}</span>
+          : <span className="text-muted-foreground">—</span>;
+      },
+    },
+    {
+      key: "avgPriceOriginal",
+      label: "Avg Price",
+      secondary: true,
+      sortable: true,
+      align: "right",
+      getValue: (r) => r.avgPriceOriginal,
+      render: (r) => (
+        <span className="font-mono text-sm">
+          {r.avgPriceOriginal > 0 ? formatPriceOriginal(r.avgPriceOriginal, r.currency) : "—"}
+        </span>
+      ),
     },
     {
       key: "firstBuy",

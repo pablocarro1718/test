@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
+import { formatCurrency, formatNumber, formatPercent, formatPriceOriginal } from "@/lib/format";
 import { xirr } from "@/lib/xirr";
 import { cn } from "@/lib/utils";
 import {
@@ -174,6 +174,8 @@ export default function DashboardPage() {
         change: p?.change || 0,
         changePercent: p?.changePercent || 0,
         priceEur: p?.priceEur || 0,
+        price: p?.price || 0,
+        currency: p?.currency || h.currency || "EUR",
       };
     })
     .filter((m) => m.changePercent !== 0);
@@ -371,7 +373,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">
-                            {formatCurrency(m.priceEur)}
+                            {formatPriceOriginal(m.price, m.currency)}
                           </span>
                           <span className="text-xs font-semibold text-positive">
                             {formatPercent(m.changePercent)}
@@ -406,7 +408,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">
-                            {formatCurrency(m.priceEur)}
+                            {formatPriceOriginal(m.price, m.currency)}
                           </span>
                           <span className="text-xs font-semibold text-negative">
                             {formatPercent(m.changePercent)}

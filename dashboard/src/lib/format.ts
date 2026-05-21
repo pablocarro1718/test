@@ -37,6 +37,19 @@ export function formatDate(dateStr: string): string {
   return `${d}/${m}/${y}`;
 }
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$", CAD: "CA$", EUR: "€", GBP: "£", MXN: "MX$",
+};
+
+/**
+ * Formats a unit price in its native currency: $204,95 / CA$2.433,10 / €1.234,56
+ */
+export function formatPriceOriginal(value: number, currency: string): string {
+  const symbol = CURRENCY_SYMBOLS[currency] ?? (currency + " ");
+  const [int, dec] = Math.abs(value).toFixed(2).split(".");
+  return `${symbol}${groupThousands(int)},${dec}`;
+}
+
 /**
  * Formats a plain number in Spanish notation: 1.983,45
  */

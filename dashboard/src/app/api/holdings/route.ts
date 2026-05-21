@@ -7,6 +7,7 @@ type ConsolidatedRow = {
   ticker: string; name: string | null; asset_type: string | null; currency: string | null;
   net_qty: number; total_qty_buy: number; total_cost: number; total_commission: number;
   first_buy: string; last_buy: string; dividends_received: number;
+  avg_price_original: number | null;
 };
 type BrokerRow = { ticker: string; broker: string; net_qty: number; total_qty_buy: number; total_cost: number };
 type BrokerListRow = { broker: string };
@@ -62,6 +63,13 @@ export async function GET(request: Request) {
         LEFT JOIN symbols s ON o.ticker = s.ticker
         WHERE o.operation_type = 'DIVIDEND' ${divWhere}
         GROUP BY o.ticker
+      ),
+      avg_orig AS (
+        SELECT ticker,
+          SUM(price_original * quantity) / SUM(quantity) AS avg_price_original
+        FROM operations
+        WHERE operation_type = 'BUY'
+        GROUP BY ticker
       )
       SELECT p.ticker, s.name, s.asset_type, s.currency,
         SUM(p.net_qty)        AS net_qty,
@@ -70,10 +78,12 @@ export async function GET(request: Request) {
         SUM(p.commission_eur) AS total_commission,
         MIN(p.first_buy)      AS first_buy,
         MAX(p.last_buy)       AS last_buy,
-        COALESCE(d.dividends_received, 0) AS dividends_received
+        COALESCE(d.dividends_received, 0) AS dividends_received,
+        MAX(ao.avg_price_original)        AS avg_price_original
       FROM open_broker_pos p
       LEFT JOIN symbols s ON p.ticker = s.ticker
       LEFT JOIN div_agg d ON p.ticker = d.ticker
+      LEFT JOIN avg_orig ao ON ao.ticker = p.ticker
       GROUP BY p.ticker
       HAVING SUM(p.net_qty) > 0.001
       ORDER BY total_cost DESC`,
@@ -119,6 +129,7 @@ export async function GET(request: Request) {
       quantity: pos.net_qty,
       costBasis,
       avgCostPerUnit: avgCost,
+      avgPriceOriginal: pos.avg_price_original ?? 0,
       commission: pos.total_commission,
       firstBuy: pos.first_buy,
       lastBuy: pos.last_buy,

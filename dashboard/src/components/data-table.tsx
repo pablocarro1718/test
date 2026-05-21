@@ -58,6 +58,8 @@ export interface ColumnDef<T> {
   sortable?: boolean;
   /** Secondary columns are hidden by default; user can toggle them */
   secondary?: boolean;
+  /** Removable columns are visible by default but appear in the toggler so users can hide them */
+  removable?: boolean;
   align?: "left" | "right" | "center";
   /** What to show in the sticky footer row */
   footer?: "sum" | "avg" | "count" | null;
@@ -138,7 +140,7 @@ function SortableColItem<T>({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const isAlwaysVisible = !col.secondary;
+  const isAlwaysVisible = !col.secondary && !col.removable;
 
   return (
     <div
@@ -195,7 +197,7 @@ function ColSelector<T>({
     .map((key) => columns.find((c) => c.key === key))
     .filter((c): c is ColumnDef<T> => !!c);
 
-  if (columns.filter((c) => c.secondary).length === 0) return null;
+  if (columns.filter((c) => c.secondary || c.removable).length === 0) return null;
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -375,7 +377,8 @@ export function DataTable<T>({
         if (stored) return new Set(JSON.parse(stored));
       } catch {}
     }
-    return new Set<string>();
+    // removable columns start visible; secondary columns start hidden
+    return new Set<string>(columns.filter((c) => c.removable).map((c) => c.key));
   });
 
   function toggleColumn(key: string) {
@@ -439,7 +442,7 @@ export function DataTable<T>({
     () =>
       columnOrder
         .map((key) => columns.find((c) => c.key === key))
-        .filter((c): c is ColumnDef<T> => !!c && (!c.secondary || visibleSecondary.has(c.key))),
+        .filter((c): c is ColumnDef<T> => !!c && ((!c.secondary && !c.removable) || visibleSecondary.has(c.key))),
     [columns, columnOrder, visibleSecondary]
   );
 
@@ -517,7 +520,7 @@ export function DataTable<T>({
   return (
     <div className="space-y-3">
       {/* Filter + column selector row */}
-      {(filterSlot || columns.some((c) => c.secondary)) && (
+      {(filterSlot || columns.some((c) => c.secondary || c.removable)) && (
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-1 flex-wrap items-center gap-3">
             {filterSlot}

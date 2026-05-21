@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { formatCurrency, formatNumber, formatDate } from "@/lib/format";
+import { formatCurrency, formatNumber, formatDate, formatPriceOriginal } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";
 import { DataTable, ColumnDef } from "@/components/data-table";
@@ -176,7 +176,7 @@ const COLUMNS: ColumnDef<ActivityItem>[] = [
     sortable: true,
     align: "right",
     getValue: (r) => r.price_original,
-    render: (r) => <span className="font-mono text-sm">{r.price_original > 0 ? formatNumber(r.price_original, 4) : "—"}</span>,
+    render: (r) => <span className="font-mono text-sm">{r.price_original > 0 ? formatPriceOriginal(r.price_original, r.currency_original) : "—"}</span>,
   },
   {
     key: "currency_original",
