@@ -338,7 +338,7 @@ export default function ActivityPage() {
                 {r.fills.map((f, i) => (
                   <tr key={i} className="tabular-nums">
                     <td className="pr-4 py-0.5">{formatNumber(f.quantity, f.quantity < 1 ? 6 : 4)}</td>
-                    <td className="text-right pr-4 py-0.5">{formatNumber(f.price_original, 4)}</td>
+                    <td className="text-right pr-4 py-0.5">{f.price_original > 0 ? formatPriceOriginal(f.price_original, r.currency_original) : "—"}</td>
                     <td className="text-right pr-4 py-0.5">{formatCurrency(f.amount_eur)}</td>
                     <td className="text-right pr-4 py-0.5">{f.commission_eur > 0 ? formatCurrency(f.commission_eur) : "—"}</td>
                     <td className="text-right py-0.5">{f.fx_rate !== 1 ? formatNumber(f.fx_rate, 4) : "—"}</td>
