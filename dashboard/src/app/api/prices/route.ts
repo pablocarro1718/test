@@ -1,62 +1,11 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { fetchYahooQuote, getFxRate } from "@/lib/yahoo";
 
 export const dynamic = "force-dynamic";
 
 const priceCache: Record<string, { price: number; currency: string; change: number; changePercent: number; timestamp: number }> = {};
 const CACHE_TTL = 5 * 60 * 1000;
-const fxCache: Record<string, { rate: number; timestamp: number }> = {};
-
-interface YahooQuoteResult {
-  regularMarketPrice?: number;
-  currency?: string;
-  regularMarketChange?: number;
-  regularMarketChangePercent?: number;
-  symbol?: string;
-}
-
-async function fetchYahooQuote(symbol: string): Promise<YahooQuoteResult | null> {
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
-    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" } });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const meta = data?.chart?.result?.[0]?.meta;
-    if (!meta) return null;
-    const price = meta.regularMarketPrice ?? 0;
-    const prevClose = meta.previousClose ?? meta.chartPreviousClose ?? price;
-    const change = price - prevClose;
-    return {
-      regularMarketPrice: price,
-      currency: meta.currency || "USD",
-      regularMarketChange: change,
-      regularMarketChangePercent: prevClose > 0 ? (change / prevClose) * 100 : 0,
-      symbol: meta.symbol,
-    };
-  } catch (err) {
-    console.error(`Yahoo fetch error for ${symbol}:`, err);
-    return null;
-  }
-}
-
-async function getFxRate(currency: string): Promise<number> {
-  if (currency === "EUR") return 1;
-  const pair = `${currency}EUR=X`;
-  const cached = fxCache[pair];
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) return cached.rate;
-  const quote = await fetchYahooQuote(pair);
-  if (quote?.regularMarketPrice) {
-    fxCache[pair] = { rate: quote.regularMarketPrice, timestamp: Date.now() };
-    return quote.regularMarketPrice;
-  }
-  const inverseQuote = await fetchYahooQuote(`EUR${currency}=X`);
-  if (inverseQuote?.regularMarketPrice) {
-    const rate = 1 / inverseQuote.regularMarketPrice;
-    fxCache[pair] = { rate, timestamp: Date.now() };
-    return rate;
-  }
-  return 1;
-}
 
 export async function GET() {
   const db = getDb();

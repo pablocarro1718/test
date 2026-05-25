@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatNumber, formatPercent, formatPriceOriginal } from "@/lib/format";
@@ -108,12 +108,32 @@ function PieTooltipContent({ active, payload }: { active?: boolean; payload?: Ar
   );
 }
 
+/* ── Period selector ────────────────────────────────── */
+
+type Period = "1D" | "1W" | "1M" | "YTD" | "1Y" | "ALL";
+
+const PERIODS: Array<{ key: Period; label: string }> = [
+  { key: "1D",  label: "1D"  },
+  { key: "1W",  label: "1S"  },
+  { key: "1M",  label: "1M"  },
+  { key: "YTD", label: "YTD" },
+  { key: "1Y",  label: "1A"  },
+  { key: "ALL", label: "TODO" },
+];
+
 /* ── Component ──────────────────────────────────────── */
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [prices, setPrices] = useState<PricesData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Period selector state — hooks must be before any conditional returns
+  const [selectedPeriod, setSelectedPeriod] = useState<Period>("1D");
+  const [fetchedReturn, setFetchedReturn] = useState<{ changeEur: number; changePercent: number } | null>(null);
+  const [periodLoading, setPeriodLoading] = useState(false);
+  // Ref holds current marketValue so the async handler always uses the latest value
+  const marketValueRef = useRef(0);
 
   useEffect(() => {
     Promise.all([
@@ -241,71 +261,113 @@ export default function DashboardPage() {
   const dayOfWeek = new Date().getDay();
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
+  // Keep ref in sync so the async handler always uses the latest market value
+  marketValueRef.current = marketValue;
+
+  // Period change handler (defined after marketValue is available)
+  async function handlePeriodChange(period: Period) {
+    setSelectedPeriod(period);
+    if (period === "1D" || period === "ALL") {
+      setPeriodLoading(false);
+      return;
+    }
+    setPeriodLoading(true);
+    setFetchedReturn(null);
+    try {
+      const res = await fetch(
+        `/api/period-returns?period=${period}&endValue=${Math.round(marketValueRef.current)}`
+      );
+      if (res.ok) {
+        const json = await res.json();
+        setFetchedReturn({ changeEur: json.changeEur, changePercent: json.changePercent });
+      }
+    } catch { /* noop */ }
+    finally { setPeriodLoading(false); }
+  }
+
+  // Values for the selected period (1D and ALL computed locally, others from fetch)
+  const currentPeriodChange =
+    selectedPeriod === "1D"  ? { changeEur: dailyChange,    changePercent: dailyChangePct  } :
+    selectedPeriod === "ALL" ? { changeEur: unrealizedPnl,  changePercent: unrealizedPct   } :
+    fetchedReturn;
+
+  const PERIOD_DESCRIPTIONS: Record<Period, string> = {
+    "1D":  isWeekend ? "Último día" : "Hoy",
+    "1W":  "Última semana",
+    "1M":  "Último mes",
+    "YTD": "Este año",
+    "1Y":  "Último año",
+    "ALL": "P&L no realizado",
+  };
+
   return (
     <div className="space-y-5">
       {/* ── Hero Card ────────────────────────────── */}
       <Card>
         <CardContent className="p-6">
 
-          {/* Label */}
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-            Portfolio Value
-          </p>
-
-          {/* Big number */}
-          <p className="mt-1 text-5xl font-bold tracking-tight tabular-nums">
-            {formatCurrency(marketValue, 0)}
-          </p>
-
-          {/* Daily change + Unrealized — full width, equal columns */}
-          <div className="mt-5 grid grid-cols-2 gap-px bg-border/40 rounded-xl overflow-hidden sm:grid-cols-2">
-            {/* Today */}
-            <div className="bg-card px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                {isWeekend ? "Último día" : "Hoy"}
-              </p>
-              <div className={cn(
-                "flex items-center gap-1.5 text-xl font-bold tabular-nums",
-                dailyChange >= 0 ? "text-positive" : "text-negative"
-              )}>
-                {dailyChange >= 0
-                  ? <ArrowUpRight className="h-5 w-5 shrink-0" />
-                  : <ArrowDownRight className="h-5 w-5 shrink-0" />}
-                {formatCurrency(Math.abs(dailyChange), 0)}
-              </div>
-              <p className={cn(
-                "mt-0.5 text-sm font-medium",
-                dailyChange >= 0 ? "text-positive" : "text-negative"
-              )}>
-                {formatPercent(dailyChangePct)}
-              </p>
-            </div>
-
-            {/* Unrealized total */}
-            <div className="bg-card px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                Total no realizado
-              </p>
-              <div className={cn(
-                "flex items-center gap-1.5 text-xl font-bold tabular-nums",
-                unrealizedPnl >= 0 ? "text-positive" : "text-negative"
-              )}>
-                {unrealizedPnl >= 0
-                  ? <ArrowUpRight className="h-5 w-5 shrink-0" />
-                  : <ArrowDownRight className="h-5 w-5 shrink-0" />}
-                {formatCurrency(Math.abs(unrealizedPnl), 0)}
-              </div>
-              <p className={cn(
-                "mt-0.5 text-sm font-medium",
-                unrealizedPnl >= 0 ? "text-positive" : "text-negative"
-              )}>
-                {formatPercent(unrealizedPct)}
-              </p>
+          {/* Top row: label + period tabs */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              Portfolio Value
+            </p>
+            <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
+              {PERIODS.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => handlePeriodChange(p.key)}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                    selectedPeriod === p.key
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Secondary metadata */}
-          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {/* Portfolio value */}
+          <p className="mt-2 text-5xl font-bold tracking-tight tabular-nums">
+            {formatCurrency(marketValue, 0)}
+          </p>
+
+          {/* Period return row */}
+          <div className="mt-4 h-12 flex items-center">
+            {periodLoading ? (
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-32 animate-pulse rounded-md bg-muted" />
+                <div className="h-5 w-16 animate-pulse rounded-md bg-muted" />
+              </div>
+            ) : currentPeriodChange !== null ? (
+              <div className={cn(
+                "flex flex-wrap items-center gap-x-3 gap-y-0.5",
+                currentPeriodChange.changeEur >= 0 ? "text-positive" : "text-negative"
+              )}>
+                <div className="flex items-center gap-1.5 text-2xl font-bold tabular-nums">
+                  {currentPeriodChange.changeEur >= 0
+                    ? <ArrowUpRight className="h-6 w-6 shrink-0" />
+                    : <ArrowDownRight className="h-6 w-6 shrink-0" />}
+                  {formatCurrency(Math.abs(currentPeriodChange.changeEur), 0)}
+                </div>
+                <span className="text-base font-semibold tabular-nums">
+                  {formatPercent(currentPeriodChange.changePercent)}
+                </span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  {PERIOD_DESCRIPTIONS[selectedPeriod]}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-32 animate-pulse rounded-md bg-muted" />
+              </div>
+            )}
+          </div>
+
+          {/* Metadata footer */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground border-t border-border/40 pt-3">
             <span>
               Cost Basis:{" "}
               <span className="font-medium text-foreground">
