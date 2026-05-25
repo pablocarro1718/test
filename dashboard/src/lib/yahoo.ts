@@ -85,7 +85,8 @@ export async function fetchYahooHistory(
       .map((t: number, i: number) => ({ timestamp: t * 1000, close: closes[i] }))
       .filter((p): p is { timestamp: number; close: number } =>
         p.close != null && p.close > 0
-      );
+      )
+      .sort((a, b) => a.timestamp - b.timestamp);
   } catch (err) {
     console.error(`Yahoo history error for ${symbol}:`, err);
     return [];

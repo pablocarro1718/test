@@ -139,9 +139,10 @@ export async function GET(request: Request) {
     args: [startDateStr],
   })).rows as unknown as FlowRow[];
 
+  // amount_eur is already signed in the DB: positive for deposits, negative for withdrawals
   const flows = flowRows.map((f) => ({
     date: f.date,
-    amountEur: f.flow_type === "deposit" ? f.amount_eur : -f.amount_eur,
+    amountEur: f.amount_eur,
   }));
 
   // 5. Modified Dietz
