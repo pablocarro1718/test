@@ -65,11 +65,12 @@ export async function GET(request: Request) {
         GROUP BY o.ticker
       ),
       avg_orig AS (
-        SELECT ticker,
-          SUM(price_original * quantity) / SUM(quantity) AS avg_price_original
-        FROM operations
-        WHERE operation_type = 'BUY'
-        GROUP BY ticker
+        SELECT o.ticker,
+          SUM(o.price_original * o.quantity) / SUM(o.quantity) AS avg_price_original
+        FROM operations o
+        INNER JOIN open_broker_pos obp ON o.ticker = obp.ticker AND o.broker = obp.broker
+        WHERE o.operation_type = 'BUY'
+        GROUP BY o.ticker
       )
       SELECT p.ticker, s.name, s.asset_type, s.currency,
         SUM(p.net_qty)        AS net_qty,
