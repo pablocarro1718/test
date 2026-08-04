@@ -315,4 +315,19 @@ def sync_ibkr_transactions(output_path: str = 'inversiones_unificadas.csv'):
 
 
 if __name__ == '__main__':
-    sync_ibkr_transactions()
+    import sys
+    try:
+        sync_ibkr_transactions()
+    except Exception as e:
+        msg = str(e)
+        # Token/auth errors (1015) are PERSISTENT: they need a human to refresh the
+        # IBKR Flex token. Exit non-zero so CI's alert step fires an email.
+        if "1015" in msg or "Token is invalid" in msg:
+            print("❌ Token de IBKR inválido o caducado — hay que refrescarlo (Flex Web Service).")
+            sys.exit(1)
+        # Transient errors (1001 = servidor ocupado, 1025 = lockout temporal, red):
+        # el pipeline sigue con el último ibkr_transactions.csv comiteado y la próxima
+        # ejecución programada reintenta. No es accionable → no disparamos alerta.
+        print(f"⚠️  Fallo transitorio de IBKR ({msg}). Se usará el último CSV conocido; "
+              f"se reintentará en la próxima ejecución programada.")
+        sys.exit(0)
