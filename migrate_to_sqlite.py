@@ -1,6 +1,6 @@
 """
 Script de migración: consolida todas las fuentes de datos en portfolio.db (SQLite).
-Ejecutar una sola vez después de correr normalizar_inversiones.py + actualizar_fechas_t212.py.
+Paso 3 del pipeline: ejecutar después de normalizar_inversiones.py.
 
 Para ejecutar: python migrate_to_sqlite.py
 """
@@ -219,18 +219,6 @@ CREATE TABLE IF NOT EXISTS brokers (
     is_active INTEGER DEFAULT 1,
     notes TEXT DEFAULT ''
 );
-
-CREATE TABLE IF NOT EXISTS price_cache (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT NOT NULL,
-    symbol TEXT NOT NULL,
-    close_price REAL NOT NULL,
-    currency TEXT NOT NULL,
-    fetched_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(date, symbol)
-);
-
-CREATE INDEX IF NOT EXISTS idx_price_cache_lookup ON price_cache(date, symbol);
 
 CREATE TABLE IF NOT EXISTS cash_balances (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

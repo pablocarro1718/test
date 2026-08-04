@@ -30,18 +30,12 @@ jobs:
           python -m pip install pandas requests python-dotenv yfinance
 
       - name: Sync IBKR
-        continue-on-error: true          # IBKR token can expire; don't kill the whole pipeline
+        id: ibkr
+        continue-on-error: true          # IBKR token can expire; sync the rest, then alert at the end
         env:
           IBKR_TOKEN: ${{ secrets.IBKR_TOKEN }}
           IBKR_QUERY_ID: ${{ secrets.IBKR_QUERY_ID }}
         run: python ibkr_sync.py
-
-      - name: Sync Kraken
-        continue-on-error: true
-        env:
-          KRAKEN_API_KEY: ${{ secrets.KRAKEN_API_KEY }}
-          KRAKEN_PRIVATE_KEY: ${{ secrets.KRAKEN_PRIVATE_KEY }}
-        run: python kraken_sync.py
 
       - name: Normalize all transactions
         run: python normalizar_inversiones.py
@@ -66,3 +60,11 @@ jobs:
             git commit -m "Auto-sync: Update portfolio data $(date +'%Y-%m-%d %H:%M UTC')"
             git push
           fi
+
+      # Runs last: the rest of the pipeline already synced with last-known IBKR data,
+      # but we still fail the job so GitHub emails an alert that the IBKR token expired.
+      - name: Alert if IBKR sync failed
+        if: steps.ibkr.outcome == 'failure'
+        run: |
+          echo "::error::IBKR sync failed — the IBKR_TOKEN secret has likely expired. Refresh it (Flex Web Service) and update the GitHub secret."
+          exit 1
