@@ -39,7 +39,7 @@ interface DashboardData {
     totalDividends: number;
     realizedPnl: number;
   };
-  xirrFlows: Array<{ date: string; amount: number }>;
+  tirFlows: Array<{ date: string; amount: number; open: boolean }>;
   externalValue: number;
   externalPositions: Array<{ platform: string; description: string; value_eur: number }>;
   allocation: Array<{ assetType: string; costBasis: number }>;
@@ -174,15 +174,20 @@ export default function DashboardPage() {
       ? ((marketValue - data.openCostBasis) / data.openCostBasis) * 100
       : 0;
 
-  // XIRR
-  const xirrFlowsDated = [
-    ...data.xirrFlows.map((f) => ({
-      date: new Date(f.date),
-      amount: f.amount,
-    })),
-    { date: new Date(), amount: marketValue },
-  ];
-  const xirrResult = xirr(xirrFlowsDated);
+  // Money-weighted TIR (XIRR) on securities operations, with current market value as the
+  // terminal flow. Two views: full history (all positions) and live portfolio (open only).
+  // Deposits/idle cash are excluded upstream, so uninvested cash never distorts these.
+  const now = new Date();
+  const tirGeneral = xirr([
+    ...data.tirFlows.map((f) => ({ date: new Date(f.date), amount: f.amount })),
+    { date: now, amount: marketValue },
+  ]);
+  const tirVivo = xirr([
+    ...data.tirFlows
+      .filter((f) => f.open)
+      .map((f) => ({ date: new Date(f.date), amount: f.amount })),
+    { date: now, amount: marketValue },
+  ]);
 
   // Today's movers: sort holdings by changePercent
   const movers = data.holdings
@@ -375,15 +380,27 @@ export default function DashboardPage() {
               </span>
             </span>
             <span className="text-border select-none">·</span>
-            <span>
-              XIRR:{" "}
+            <span title="Rentabilidad anualizada (money-weighted) de todo tu histórico: posiciones abiertas y cerradas">
+              TIR general:{" "}
               <span className={cn(
                 "font-medium",
-                xirrResult !== null && xirrResult >= 0 ? "text-positive"
-                  : xirrResult !== null ? "text-negative"
+                tirGeneral !== null && tirGeneral >= 0 ? "text-positive"
+                  : tirGeneral !== null ? "text-negative"
                   : "text-foreground"
               )}>
-                {xirrResult !== null ? formatPercent(xirrResult * 100) : "N/A"}
+                {tirGeneral !== null ? formatPercent(tirGeneral * 100) : "N/A"}
+              </span>
+            </span>
+            <span className="text-border select-none">·</span>
+            <span title="Rentabilidad anualizada (money-weighted) de las posiciones que tienes abiertas ahora mismo">
+              TIR vivo:{" "}
+              <span className={cn(
+                "font-medium",
+                tirVivo !== null && tirVivo >= 0 ? "text-positive"
+                  : tirVivo !== null ? "text-negative"
+                  : "text-foreground"
+              )}>
+                {tirVivo !== null ? formatPercent(tirVivo * 100) : "N/A"}
               </span>
             </span>
             <span className="text-border select-none">·</span>

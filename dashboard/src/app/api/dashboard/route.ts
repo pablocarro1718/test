@@ -34,7 +34,6 @@ type OpenRow = {
 };
 type TotalsRow = { totalInvested: number; totalSold: number; totalDividends: number };
 type ClosedRow = { ticker: string; qty_bought: number; qty_sold: number; cost: number; proceeds: number };
-type CfRow = { date: string; flow_type: string; amount_eur: number };
 type PulseRow = { month: string; netChange: number };
 type BrokerRow = { broker: string; invested: number };
 type CashBalRow = { total: number };
@@ -100,12 +99,26 @@ export async function GET() {
     realizedPnl += pos.proceeds - costPerUnit * pos.qty_sold;
   }
 
-  // --- XIRR FLOWS ---
-  const xirrFlows = ((await db.execute(
-    `SELECT date, flow_type, amount_eur FROM cash_flows ORDER BY date`
-  )).rows as unknown as CfRow[]).map((cf) => ({
-    date: cf.date,
-    amount: -cf.amount_eur, // deposits positive in DB → negate = outflow; withdrawals negative in DB → negate = inflow
+  // --- TIR FLOWS (money-weighted, based on securities operations — NOT deposits) ---
+  // BUY = money deployed into a security (outflow); SELL/DIVIDEND = money returned (inflow).
+  // Deposits/idle cash are deliberately excluded so uninvested cash never distorts the TIR.
+  // `open` flags flows of positions still held today, letting the client compute two views:
+  //   • TIR general: all flows (open + closed positions) → full investing track record
+  //   • TIR vivo:    only open-position flows → return on what's currently held
+  // The terminal flow (current market value of open holdings) is appended client-side,
+  // since it depends on live prices fetched there.
+  const openTickerSet = new Set(openPositions.map((p) => p.ticker));
+  type OpFlowRow = { ticker: string; date: string; amount: number };
+  const tirFlows = ((await db.execute(
+    `SELECT ticker, date,
+       CASE WHEN operation_type = 'BUY' THEN -ABS(net_amount_eur) ELSE net_amount_eur END as amount
+     FROM operations
+     WHERE operation_type IN ('BUY','SELL','DIVIDEND')
+     ORDER BY date`
+  )).rows as unknown as OpFlowRow[]).map((f) => ({
+    date: f.date,
+    amount: f.amount,
+    open: openTickerSet.has(f.ticker),
   }));
 
   // --- ALLOCATION BY ASSET TYPE ---
@@ -198,7 +211,7 @@ export async function GET() {
       totalDividends: totals?.totalDividends || 0,
       realizedPnl,
     },
-    xirrFlows,
+    tirFlows,
     allocation,
     byGeography,
     topHoldings: holdings.slice(0, 5),
