@@ -41,6 +41,7 @@ interface DashboardData {
   };
   tirFlows: Array<{ date: string; amount: number; open: boolean }>;
   externalValue: number;
+  cashBalance: number;
   externalPositions: Array<{ platform: string; description: string; value_eur: number }>;
   allocation: Array<{ assetType: string; costBasis: number }>;
   byGeography: Array<{ name: string; value: number; percent: number }>;
@@ -408,6 +409,17 @@ export default function DashboardPage() {
               <span className="font-medium text-foreground">{data.positionsCount}</span>{" "}
               posiciones abiertas
             </span>
+            {(data.cashBalance ?? 0) > 0 && (
+              <>
+                <span className="text-border select-none">·</span>
+                <span title="Efectivo sin invertir en el broker (no cuenta en la TIR ni en el valor de cartera)">
+                  Cash en broker:{" "}
+                  <span className="font-medium text-foreground">
+                    {formatCurrency(data.cashBalance, 0)}
+                  </span>
+                </span>
+              </>
+            )}
           </div>
 
         </CardContent>

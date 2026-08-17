@@ -254,6 +254,53 @@ def convert_to_unified_format(trades_df: pd.DataFrame, cash_df: pd.DataFrame) ->
     return trades_unified_df, deposits_df
 
 
+# Divisa base de la cuenta IBKR (U23227441). El Cash Report devuelve el saldo
+# consolidado en esta divisa bajo la fila CurrencyPrimary=BASE_SUMMARY.
+# Verificado por reconciliación de depósitos (los ~29.4k del informe cuadran con
+# nuestros ~26.8k EUR ≈ 28.9k USD, no con EUR). Si algún día cambias la divisa
+# base en IBKR, actualiza esta constante.
+BASE_CURRENCY = "USD"
+
+
+def parse_cash_report(csv_content: str):
+    """
+    Extrae el saldo de efectivo del Cash Report (Informe de efectivo).
+    IBKR lo devuelve como una fila resumen en divisa base
+    (CurrencyPrimary=BASE_SUMMARY) con la columna EndingCash.
+    Devuelve {'as_of', 'currency', 'ending_cash'} o None si no se encuentra.
+    """
+    import csv as _csv
+    lines = csv_content.strip().split('\n')
+    header = None
+    data_start = 0
+    for i, line in enumerate(lines):
+        if 'EndingCash' in line and 'StartingCash' in line and 'CurrencyPrimary' in line:
+            header = next(_csv.reader([line]))
+            data_start = i + 1
+            break
+    if header is None:
+        return None
+
+    ncol = len(header)
+    for line in lines[data_start:]:
+        if not line.strip():
+            break
+        row = next(_csv.reader([line]))
+        if len(row) != ncol:
+            break  # empieza otra sección
+        d = dict(zip(header, row))
+        if d.get('CurrencyPrimary') == 'BASE_SUMMARY':
+            try:
+                return {
+                    'as_of': d.get('ToDate', ''),
+                    'currency': BASE_CURRENCY,
+                    'ending_cash': float(d.get('EndingCash', 0)),
+                }
+            except ValueError:
+                return None
+    return None
+
+
 def sync_ibkr_transactions(output_path: str = 'inversiones_unificadas.csv'):
     """
     Función principal: sincronizar transacciones de IBKR
@@ -278,6 +325,17 @@ def sync_ibkr_transactions(output_path: str = 'inversiones_unificadas.csv'):
         with open('ibkr_raw_response.txt', 'w') as f:
             f.write(statement)
         print(f"💾 Respuesta raw guardada en ibkr_raw_response.txt")
+
+        # Paso 2b: Saldo de efectivo (Cash Report) en divisa base
+        cash_bal = parse_cash_report(statement)
+        if cash_bal:
+            import csv as _csv
+            with open('ibkr_cash_balance.csv', 'w', newline='') as f:
+                w = _csv.writer(f)
+                w.writerow(['as_of', 'currency', 'ending_cash'])
+                w.writerow([cash_bal['as_of'], cash_bal['currency'], cash_bal['ending_cash']])
+            print(f"💰 Saldo de efectivo: {cash_bal['ending_cash']:,.2f} {cash_bal['currency']} "
+                  f"(guardado en ibkr_cash_balance.csv)")
 
         # Paso 3: Parsear trades y cash transactions
         trades_df, cash_df = parse_trades_csv(statement)

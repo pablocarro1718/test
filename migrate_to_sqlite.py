@@ -13,6 +13,7 @@ DIR = Path(__file__).parent
 DB_PATH = DIR / "portfolio.db"
 CSV_PATH = DIR / "inversiones_unificadas.csv"
 IBKR_DEPOSITS_CSV = DIR / "ibkr_deposits.csv"
+IBKR_CASH_BALANCE_CSV = DIR / "ibkr_cash_balance.csv"
 
 # ============================================================
 # Datos hardcoded a migrar (de app.py y otros scripts)
@@ -448,10 +449,40 @@ def migrate_external_positions(conn):
     return count
 
 
+def _ibkr_cash_balance_from_csv() -> list:
+    """Lee ibkr_cash_balance.csv (generado por ibkr_sync.py) → filas de cash_balances.
+    El saldo llega en divisa base (USD); amount_eur se deja igual al nativo como
+    placeholder — el dashboard lo convierte a EUR con FX en vivo al mostrarlo."""
+    if not IBKR_CASH_BALANCE_CSV.exists():
+        return []
+    rows = []
+    with open(IBKR_CASH_BALANCE_CSV, newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            try:
+                amount = float(r["ending_cash"])
+            except (KeyError, ValueError):
+                continue
+            # as_of viene en DD/MM/YYYY → ISO
+            as_of = r.get("as_of", "")
+            if "/" in as_of:
+                d, m, y = as_of.split("/")
+                as_of = f"{y}-{m}-{d}"
+            rows.append({
+                "broker": "IBKR",
+                "currency": r.get("currency", "USD"),
+                "amount": amount,
+                "amount_eur": amount,  # placeholder; el dashboard convierte con FX live
+                "updated_at": as_of,
+                "source": "ibkr_flex",
+            })
+    return rows
+
+
 def migrate_cash_balances(conn):
     """Migra saldos de efectivo no invertido a la tabla cash_balances."""
+    all_balances = SALDOS_CAJA + _ibkr_cash_balance_from_csv()
     count = 0
-    for saldo in SALDOS_CAJA:
+    for saldo in all_balances:
         conn.execute("""
             INSERT INTO cash_balances (broker, currency, amount, amount_eur, updated_at, source)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -461,7 +492,7 @@ def migrate_cash_balances(conn):
             saldo["amount"],
             saldo["amount_eur"],
             saldo["updated_at"],
-            "manual",
+            saldo.get("source", "manual"),
         ))
         count += 1
 
@@ -469,7 +500,7 @@ def migrate_cash_balances(conn):
     if count:
         print(f"  ✓ {count} saldos de caja migrados")
     else:
-        print("  ℹ  No hay saldos de caja configurados (SALDOS_CAJA vacío)")
+        print("  ℹ  No hay saldos de caja configurados")
     return count
 
 

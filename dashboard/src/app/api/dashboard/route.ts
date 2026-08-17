@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getFxRate } from "@/lib/yahoo";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ type TotalsRow = { totalInvested: number; totalSold: number; totalDividends: num
 type ClosedRow = { ticker: string; qty_bought: number; qty_sold: number; cost: number; proceeds: number };
 type PulseRow = { month: string; netChange: number };
 type BrokerRow = { broker: string; invested: number };
-type CashBalRow = { total: number };
+type CashBalRow = { currency: string; amount: number };
 type ExtPosRow = { total: number; platforms: string };
 
 export async function GET() {
@@ -161,14 +162,18 @@ export async function GET() {
   `)).rows as unknown as PulseRow[];
 
   // --- UNINVESTED CASH BALANCES ---
-  // Sum of manually-tracked cash sitting in brokers not yet invested.
-  // Table may not exist yet in older Turso instances — default to 0.
+  // Cash sitting in brokers, not yet invested (e.g. IBKR reports it in its account
+  // base currency, USD). Convert each row to EUR with live FX — same source as prices —
+  // so the figure is always current. Table may not exist in older Turso instances → 0.
   let cashBalance = 0;
   try {
-    const cashBalResult = (await db.execute(
-      `SELECT COALESCE(SUM(amount_eur), 0) as total FROM cash_balances`
-    )).rows[0] as unknown as CashBalRow;
-    cashBalance = cashBalResult?.total ?? 0;
+    const cashRows = (await db.execute(
+      `SELECT currency, amount FROM cash_balances`
+    )).rows as unknown as CashBalRow[];
+    for (const r of cashRows) {
+      const fx = await getFxRate(r.currency || "EUR");
+      cashBalance += (r.amount ?? 0) * fx;
+    }
   } catch {
     // cash_balances table not yet created in this Turso instance
   }
