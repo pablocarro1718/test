@@ -84,9 +84,11 @@ EXTERNAL_POSITIONS = [
 ]
 
 SYMBOL_MAP = {
-    'BTC': {'yfinance': 'BTC-USD', 'asset_type': 'Crypto', 'currency': 'USD', 'name': 'Bitcoin'},
-    'ETH': {'yfinance': 'ETH-USD', 'asset_type': 'Crypto', 'currency': 'USD', 'name': 'Ethereum'},
-    'SOL': {'yfinance': 'SOL-USD', 'asset_type': 'Crypto', 'currency': 'USD', 'name': 'Solana'},
+    # Cripto comprada en EUR en Kraken → usar los pares en EUR de Yahoo para que
+    # precio actual y coste sean ambos EUR-nativos (sin conversión de divisa).
+    'BTC': {'yfinance': 'BTC-EUR', 'asset_type': 'Crypto', 'currency': 'EUR', 'name': 'Bitcoin'},
+    'ETH': {'yfinance': 'ETH-EUR', 'asset_type': 'Crypto', 'currency': 'EUR', 'name': 'Ethereum'},
+    'SOL': {'yfinance': 'SOL-EUR', 'asset_type': 'Crypto', 'currency': 'EUR', 'name': 'Solana'},
     'CSU': {'yfinance': 'CSU.TO', 'asset_type': 'Stock', 'currency': 'CAD', 'name': 'Constellation Software'},
     'CSPX': {'yfinance': 'CSPX.L', 'asset_type': 'ETF', 'currency': 'USD', 'name': 'iShares Core S&P 500 UCITS'},
     'AAPL': {'yfinance': 'AAPL', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Apple Inc.'},
