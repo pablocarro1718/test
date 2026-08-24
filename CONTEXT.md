@@ -27,6 +27,7 @@ portfolio_pipeline/
 │       ├── app/
 │       │   ├── page.tsx                    # Dashboard principal
 │       │   ├── holdings/page.tsx           # Posiciones abiertas
+│       │   ├── asset/page.tsx              # Cotizaciones: gráfico por activo con marcas compra/venta
 │       │   ├── activity/page.tsx           # Historial de operaciones
 │       │   ├── flows/page.tsx              # Depósitos/retiradas
 │       │   ├── returns/page.tsx            # P&L realizado, trades cerrados
@@ -39,10 +40,11 @@ portfolio_pipeline/
 │       │       ├── returns/route.ts
 │       │       ├── allocation/route.ts
 │       │       ├── period-returns/route.ts # Retornos por periodo (1S/1M/YTD/1A, Modified Dietz sobre compras/ventas, cash-neutral)
+│       │       ├── asset-history/route.ts  # Precio histórico Yahoo + tus operaciones de un ticker (para /asset)
 │       │       └── prices/route.ts         # Precios live vía Yahoo (lib/yahoo)
 │       ├── components/
 │       │   ├── data-table.tsx              # Tabla reutilizable con toggle/reorden de columnas
-│       │   └── sidebar.tsx                 # Nav: Dashboard, Holdings, Returns, Flows, Activity
+│       │   └── sidebar.tsx                 # Nav: Dashboard, Holdings, Cotizaciones, Returns, Flows, Activity
 │       └── lib/
 │           ├── format.ts                   # Formateo numérico (regex, no Intl)
 │           ├── xirr.ts                     # Motor XIRR (Newton-Raphson)
@@ -217,6 +219,7 @@ Visibilidad y orden se persisten en `localStorage` (`dt-cols-{key}`, `dt-cols-or
 **Retornos por periodo (`period-returns`):** Modified Dietz con V_start/V_end = valor de mercado de las acciones y flujos = **compras/ventas** del periodo (NO depósitos). Así el retorno mide el rendimiento de la inversión y el cash ocioso de depósitos recientes no lo contamina (bug corregido: 1M daba −41% por el depósito de €17.5k).
 - **Activity (`/activity`):** operaciones paginadas con filtros; fills agrupados; "Price (orig)" con `formatPriceOriginal`.
 - **Flows (`/flows`):** KPIs depósitos/retiradas + gráfico mensual + detalle.
+- **Cotizaciones (`/asset`):** selector de activo (abiertos + cerrados) + rango; gráfico de cotización (divisa nativa) con marcas de compra (verde) / venta (roja) al precio real de cada operación, línea de precio medio, y stats (precio actual, precio medio, vs entrada, primera compra). Precio medio consistente con Holdings (solo lotes de brokers abiertos). API `asset-history`.
 - **Returns (`/returns`):** P&L realizado, trades cerrados, dividendos por trimestre.
 - **Allocation (`/allocation`):** funciona pero NO está enlazada en el menú.
 
