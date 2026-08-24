@@ -9,7 +9,7 @@ type ConsolidatedRow = {
   first_buy: string; last_buy: string; dividends_received: number;
   avg_price_original: number | null;
 };
-type BrokerRow = { ticker: string; broker: string; net_qty: number; total_qty_buy: number; total_cost: number };
+type BrokerRow = { ticker: string; broker: string; net_qty: number; total_qty_buy: number; total_cost: number; total_price_orig: number; currency: string };
 type BrokerListRow = { broker: string };
 type TickerFlowRow = { ticker: string; date: string; amount: number };
 
@@ -97,7 +97,9 @@ export async function GET(request: Request) {
         o.ticker, o.broker,
         SUM(CASE WHEN o.operation_type = 'BUY' THEN o.quantity ELSE -o.quantity END) as net_qty,
         SUM(CASE WHEN o.operation_type = 'BUY' THEN o.quantity ELSE 0 END) as total_qty_buy,
-        SUM(CASE WHEN o.operation_type = 'BUY' THEN ABS(o.net_amount_eur) ELSE 0 END) as total_cost
+        SUM(CASE WHEN o.operation_type = 'BUY' THEN ABS(o.net_amount_eur) ELSE 0 END) as total_cost,
+        SUM(CASE WHEN o.operation_type = 'BUY' THEN o.price_original * o.quantity ELSE 0 END) as total_price_orig,
+        COALESCE(s.currency, 'USD') as currency
       FROM operations o
       LEFT JOIN symbols s ON o.ticker = s.ticker
       WHERE o.operation_type IN ('BUY', 'SELL') ${whereClause}
@@ -108,11 +110,12 @@ export async function GET(request: Request) {
   })).rows as unknown as BrokerRow[];
 
   // Group broker breakdown by ticker
-  const brokerMap: Record<string, Array<{ broker: string; quantity: number; costBasis: number; avgCost: number }>> = {};
+  const brokerMap: Record<string, Array<{ broker: string; quantity: number; costBasis: number; avgCost: number; avgPriceOriginal: number; currency: string }>> = {};
   for (const b of brokerBreakdown) {
     if (!brokerMap[b.ticker]) brokerMap[b.ticker] = [];
     const avgCost = b.total_qty_buy > 0 ? b.total_cost / b.total_qty_buy : 0;
-    brokerMap[b.ticker].push({ broker: b.broker, quantity: b.net_qty, costBasis: avgCost * b.net_qty, avgCost });
+    const avgPriceOriginal = b.total_qty_buy > 0 ? b.total_price_orig / b.total_qty_buy : 0;
+    brokerMap[b.ticker].push({ broker: b.broker, quantity: b.net_qty, costBasis: avgCost * b.net_qty, avgCost, avgPriceOriginal, currency: b.currency });
   }
 
   let totalCostBasis = 0, totalCommission = 0, totalDividends = 0;

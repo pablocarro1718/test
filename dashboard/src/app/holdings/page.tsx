@@ -25,6 +25,8 @@ interface BrokerDetail {
   quantity: number;
   costBasis: number;
   avgCost: number;
+  avgPriceOriginal: number;
+  currency: string;
 }
 
 interface Holding {
@@ -359,7 +361,7 @@ export default function HoldingsPage() {
             <tr className="text-muted-foreground">
               <th className="pb-1 text-left font-medium">Broker</th>
               <th className="pb-1 pr-2 text-right font-medium">Qty</th>
-              <th className="pb-1 pr-2 text-right font-medium">Avg Cost</th>
+              <th className="pb-1 pr-2 text-right font-medium">Avg Price</th>
               <th className="pb-1 pr-2 text-right font-medium">Cost Basis</th>
               <th className="pb-1 pr-2 text-right font-medium">Mkt Value</th>
               <th className="pb-1 pr-2 text-right font-medium">P&L</th>
@@ -382,7 +384,7 @@ export default function HoldingsPage() {
                   <td className="pr-2 text-right font-mono text-muted-foreground">
                     {formatNumber(b.quantity, b.quantity < 1 ? 6 : 2)}
                   </td>
-                  <td className="pr-2 text-right font-mono text-muted-foreground">{formatCurrency(b.avgCost)}</td>
+                  <td className="pr-2 text-right font-mono text-muted-foreground">{b.avgPriceOriginal > 0 ? formatPriceOriginal(b.avgPriceOriginal, b.currency) : "—"}</td>
                   <td className="pr-2 text-right font-mono text-muted-foreground">{formatCurrency(b.costBasis)}</td>
                   <td className="pr-2 text-right font-mono text-muted-foreground">{formatCurrency(brokerMarketVal)}</td>
                   <td className={cn("pr-2 text-right font-mono", brokerPnl >= 0 ? "text-positive" : "text-negative")}>
