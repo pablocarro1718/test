@@ -132,17 +132,23 @@ export async function GET(request: Request) {
     }
   }
 
-  // 4. Cash flows during period (deposits = +, withdrawals = −)
-  type FlowRow = { date: string; flow_type: string; amount_eur: number };
+  // 4. Securities flows during the period — BUYs/SELLs, NOT deposits.
+  //    Deposits/idle cash are deliberately excluded so the period return measures how the
+  //    INVESTED assets performed (consistent with the money-weighted TIR), instead of being
+  //    dragged down by uninvested cash from recent deposits (e.g. the €17.5k that otherwise
+  //    made 1M read −41%). A BUY adds securities to the portfolio (contribution in); a SELL
+  //    removes them (contribution out). net_amount_eur is the cash impact (BUY negative, SELL
+  //    positive), so the securities-side contribution is its negation in both cases.
+  type FlowRow = { date: string; net_amount_eur: number };
   const flowRows = (await db.execute({
-    sql: `SELECT date, flow_type, amount_eur FROM cash_flows WHERE date > ? ORDER BY date`,
+    sql: `SELECT date, net_amount_eur FROM operations
+          WHERE operation_type IN ('BUY','SELL') AND date > ? ORDER BY date`,
     args: [startDateStr],
   })).rows as unknown as FlowRow[];
 
-  // amount_eur is already signed in the DB: positive for deposits, negative for withdrawals
   const flows = flowRows.map((f) => ({
     date: f.date,
-    amountEur: f.amount_eur,
+    amountEur: -f.net_amount_eur,
   }));
 
   // 5. Modified Dietz
