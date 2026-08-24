@@ -38,7 +38,7 @@ portfolio_pipeline/
 │       │       ├── flows/route.ts
 │       │       ├── returns/route.ts
 │       │       ├── allocation/route.ts
-│       │       ├── period-returns/route.ts # Retornos por periodo (1S/1M/YTD/1A, Modified Dietz)
+│       │       ├── period-returns/route.ts # Retornos por periodo (1S/1M/YTD/1A, Modified Dietz sobre compras/ventas, cash-neutral)
 │       │       └── prices/route.ts         # Precios live vía Yahoo (lib/yahoo)
 │       ├── components/
 │       │   ├── data-table.tsx              # Tabla reutilizable con toggle/reorden de columnas
@@ -212,7 +212,9 @@ Visibilidad y orden se persisten en `localStorage` (`dt-cols-{key}`, `dt-cols-or
 ## 14. Páginas del dashboard
 
 - **Dashboard (`/`):** hero con valor de cartera, selector de periodo (1D/1S/1M/YTD/1A/TODO), y fila de metadatos: Cost Basis · **TIR general** · **TIR vivo** · nº posiciones · **Cash en broker**. Debajo: Today's Movers (precio en moneda original) + Allocation (barra/pie/geo).
-- **Holdings (`/holdings`):** primarias removable (Cost Basis, Mkt Value, P&L, P&L %, Weight); bloqueada: Ticker; secundarias: TIR, Qty, Price, Avg Price (moneda original), First/Last Buy, Dividends, Currency. El CTE `avg_orig` calcula el precio medio **solo de posiciones-broker abiertas** (join con `open_broker_pos`), para no contaminar con lotes ya vendidos.
+- **Holdings (`/holdings`):** primarias removable (Cost Basis, Mkt Value, P&L, P&L %, Weight); bloqueada: Ticker; secundarias: TIR, Qty, Price, Avg Price (moneda original), First/Last Buy, Dividends, Currency. El CTE `avg_orig` calcula el precio medio **solo de posiciones-broker abiertas** (join con `open_broker_pos`), para no contaminar con lotes ya vendidos. El desglose por broker (fila expandida) muestra "Avg Price" en **divisa nativa** (no €), comparable con la cotización.
+
+**Retornos por periodo (`period-returns`):** Modified Dietz con V_start/V_end = valor de mercado de las acciones y flujos = **compras/ventas** del periodo (NO depósitos). Así el retorno mide el rendimiento de la inversión y el cash ocioso de depósitos recientes no lo contamina (bug corregido: 1M daba −41% por el depósito de €17.5k).
 - **Activity (`/activity`):** operaciones paginadas con filtros; fills agrupados; "Price (orig)" con `formatPriceOriginal`.
 - **Flows (`/flows`):** KPIs depósitos/retiradas + gráfico mensual + detalle.
 - **Returns (`/returns`):** P&L realizado, trades cerrados, dividendos por trimestre.
