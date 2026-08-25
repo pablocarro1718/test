@@ -19,6 +19,7 @@ const navItems = [
       { name: "Dashboard", href: "/", icon: LayoutIcon },
       { name: "Holdings", href: "/holdings", icon: WalletIcon },
       { name: "Cotizaciones", href: "/asset", icon: ChartIcon },
+      { name: "vs S&P 500", href: "/benchmark", icon: ScaleIcon },
       { name: "Returns", href: "/returns", icon: TrendingUpIcon },
       { name: "Flows", href: "/flows", icon: FlowsIcon },
       { name: "Activity", href: "/activity", icon: ListIcon },
@@ -154,6 +155,17 @@ function ChartIcon({ className }: { className?: string }) {
     <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 3v16a2 2 0 0 0 2 2h16" />
       <path d="m19 9-5 5-4-4-3 3" />
+    </svg>
+  );
+}
+
+function ScaleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v18" />
+      <path d="m5 8 7-3 7 3" />
+      <path d="M5 8l-2.5 6a3 3 0 0 0 5 0L5 8Z" />
+      <path d="M19 8l-2.5 6a3 3 0 0 0 5 0L19 8Z" />
     </svg>
   );
 }

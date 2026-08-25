@@ -28,6 +28,7 @@ portfolio_pipeline/
 │       │   ├── page.tsx                    # Dashboard principal
 │       │   ├── holdings/page.tsx           # Posiciones abiertas
 │       │   ├── asset/page.tsx              # Cotizaciones: gráfico por activo con marcas compra/venta
+│       │   ├── benchmark/page.tsx          # Portfolio vs S&P 500 (réplica money-matched en EUR)
 │       │   ├── activity/page.tsx           # Historial de operaciones
 │       │   ├── flows/page.tsx              # Depósitos/retiradas
 │       │   ├── returns/page.tsx            # P&L realizado, trades cerrados
@@ -41,10 +42,11 @@ portfolio_pipeline/
 │       │       ├── allocation/route.ts
 │       │       ├── period-returns/route.ts # Retornos por periodo (1S/1M/YTD/1A, Modified Dietz sobre compras/ventas, cash-neutral)
 │       │       ├── asset-history/route.ts  # Precio histórico Yahoo + tus operaciones de un ticker (para /asset)
+│       │       ├── benchmark/route.ts      # nav_history + réplica S&P (flujos → ^GSPC en EUR) para /benchmark
 │       │       └── prices/route.ts         # Precios live vía Yahoo (lib/yahoo)
 │       ├── components/
 │       │   ├── data-table.tsx              # Tabla reutilizable con toggle/reorden de columnas
-│       │   └── sidebar.tsx                 # Nav: Dashboard, Holdings, Cotizaciones, Returns, Flows, Activity
+│       │   └── sidebar.tsx                 # Nav: Dashboard, Holdings, Cotizaciones, vs S&P 500, Returns, Flows, Activity
 │       └── lib/
 │           ├── format.ts                   # Formateo numérico (regex, no Intl)
 │           ├── xirr.ts                     # Motor XIRR (Newton-Raphson)
@@ -225,6 +227,7 @@ Visibilidad y orden se persisten en `localStorage` (`dt-cols-{key}`, `dt-cols-or
 - **Activity (`/activity`):** operaciones paginadas con filtros; fills agrupados; "Price (orig)" con `formatPriceOriginal`.
 - **Flows (`/flows`):** KPIs depósitos/retiradas + gráfico mensual + detalle.
 - **Cotizaciones (`/asset`):** selector de activo (abiertos + cerrados) + rango; gráfico de cotización (divisa nativa) con marcas de compra (verde) / venta (roja) al precio real de cada operación, línea de precio medio, y stats (precio actual, precio medio, vs entrada, primera compra). Precio medio consistente con Holdings (solo lotes de brokers abiertos). API `asset-history`.
+- **vs S&P 500 (`/benchmark`):** dos líneas en € — tu cartera (de `nav_history`) vs una réplica que invierte **los mismos flujos de compra/venta en las mismas fechas** en el S&P 500 (^GSPC convertido a EUR). Ambas reciben el mismo dinero → la distancia = tu rentabilidad vs el índice. Método money-matched: `unidades(D)=Σ flujo(t)/SP_eur(t)`, `réplica(D)=unidades(D)×SP_eur(D)`. Resumen: capital neto invertido, tu cartera, valor S&P, diferencia. Excluye cash ocioso; ^GSPC es índice de precio (sin dividendos). API `benchmark`.
 - **Returns (`/returns`):** P&L realizado, trades cerrados, dividendos por trimestre.
 - **Allocation (`/allocation`):** funciona pero NO está enlazada en el menú.
 
