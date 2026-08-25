@@ -40,7 +40,7 @@ portfolio_pipeline/
 │       │       ├── flows/route.ts
 │       │       ├── returns/route.ts
 │       │       ├── allocation/route.ts
-│       │       ├── period-returns/route.ts # Retornos por periodo (1S/1M/YTD/1A, Modified Dietz sobre compras/ventas, cash-neutral)
+│       │       ├── period-returns/route.ts # Retornos por periodo (1S/1M/YTD/1A) — TWR exacto desde nav_history
 │       │       ├── asset-history/route.ts  # Precio histórico Yahoo + tus operaciones de un ticker (para /asset)
 │       │       ├── benchmark/route.ts      # nav_history + réplica S&P (flujos → ^GSPC en EUR) para /benchmark
 │       │       └── prices/route.ts         # Precios live vía Yahoo (lib/yahoo)
@@ -223,7 +223,7 @@ Visibilidad y orden se persisten en `localStorage` (`dt-cols-{key}`, `dt-cols-or
 - **Dashboard (`/`):** hero con valor de cartera, selector de periodo (1D/1S/1M/YTD/1A/TODO), y fila de metadatos: Cost Basis · **TIR general** · **TIR vivo** · nº posiciones · **Cash en broker**. Debajo: Today's Movers (precio en moneda original) + Allocation (barra/pie/geo).
 - **Holdings (`/holdings`):** primarias removable (Cost Basis, Mkt Value, P&L, P&L %, Weight); bloqueada: Ticker; secundarias: TIR, Qty, Price, Avg Price (moneda original), First/Last Buy, Dividends, Currency. El CTE `avg_orig` calcula el precio medio **solo de posiciones-broker abiertas** (join con `open_broker_pos`), para no contaminar con lotes ya vendidos. El desglose por broker (fila expandida) muestra "Avg Price" en **divisa nativa** (no €), comparable con la cotización.
 
-**Retornos por periodo (`period-returns`):** Modified Dietz con V_start/V_end = valor de mercado de las acciones y flujos = **compras/ventas** del periodo (NO depósitos). Así el retorno mide el rendimiento de la inversión y el cash ocioso de depósitos recientes no lo contamina (bug corregido: 1M daba −41% por el depósito de €17.5k).
+**Retornos por periodo (`period-returns`):** **TWR (time-weighted) exacto desde `nav_history`** — encadena el retorno diario `r_D=(V_D−F_D)/V_{D-1}−1`. V_start = NAV al inicio del periodo; changeEur = V_end−V_start−flujos. Cash-neutral (los flujos son compras/ventas, no depósitos → el cash ocioso no contamina; bug del −41% en 1M corregido). El TWR es inmune a la rotación (cierres forzosos T212/Degiro dan ~0% ese día). Nota: el 1A puede salir muy negativo por ventana — la cripto se compró barata (2020-2023) pero hace un año estaba en pico y cayó; es real, no un bug.
 - **Activity (`/activity`):** operaciones paginadas con filtros; fills agrupados; "Price (orig)" con `formatPriceOriginal`.
 - **Flows (`/flows`):** KPIs depósitos/retiradas + gráfico mensual + detalle.
 - **Cotizaciones (`/asset`):** selector de activo (abiertos + cerrados) + rango; gráfico de cotización (divisa nativa) con marcas de compra (verde) / venta (roja) al precio real de cada operación, línea de precio medio, y stats (precio actual, precio medio, vs entrada, primera compra). Precio medio consistente con Holdings (solo lotes de brokers abiertos). API `asset-history`.
