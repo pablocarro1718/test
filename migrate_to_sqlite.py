@@ -242,6 +242,12 @@ CREATE TABLE IF NOT EXISTS external_positions (
     updated_at TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS nav_history (
+    date TEXT PRIMARY KEY,
+    value_eur REAL NOT NULL,
+    net_flow_eur REAL NOT NULL DEFAULT 0
+);
 """
 
 

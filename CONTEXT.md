@@ -53,7 +53,8 @@ portfolio_pipeline/
 ├── ibkr_sync.py                            # IBKR Flex Query → CSVs (trades, deposits, cash balance)
 ├── normalizar_inversiones.py               # Unifica todos los CSVs → EUR (paso 2)
 ├── migrate_to_sqlite.py                    # CSV → SQLite (paso 3)
-├── sync_to_turso.py                        # SQLite → Turso (paso 4)
+├── build_nav_history.py                    # Reconstruye NAV diario en EUR → nav_history (paso 4)
+├── sync_to_turso.py                        # SQLite → Turso (paso 5)
 ├── ibkr_transactions.csv                   # ⚠ DEBE estar en git (fallback)
 ├── ibkr_deposits.csv                       # ⚠ DEBE estar en git (fallback)
 ├── ibkr_cash_balance.csv                   # ⚠ DEBE estar en git (fallback) — saldo cash IBKR
@@ -68,13 +69,14 @@ portfolio_pipeline/
 
 ---
 
-## 3. Flujo de datos — 4 pasos EN ORDEN
+## 3. Flujo de datos — 5 pasos EN ORDEN
 
 ```
 1. ibkr_sync.py            → ibkr_transactions.csv + ibkr_deposits.csv + ibkr_cash_balance.csv
 2. normalizar_inversiones.py → inversiones_unificadas.csv  (une brokers, convierte a EUR con FX histórico yfinance)
 3. migrate_to_sqlite.py    → portfolio.db  (+ DEPOSITOS hardcoded, + ibkr_deposits.csv, + ibkr_cash_balance.csv)
-4. sync_to_turso.py        → Turso (cloud) → Next.js API → Vercel
+4. build_nav_history.py    → nav_history  (valor diario de la cartera en EUR; depende de Yahoo, continue-on-error)
+5. sync_to_turso.py        → Turso (cloud) → Next.js API → Vercel
 ```
 
 - **TRAMPA #1:** correr a mano y saltarse el **paso 2** (`normalizar_inversiones.py`). `ibkr_sync.py` escribe `ibkr_transactions.csv` (crudo), pero migrate lee `inversiones_unificadas.csv`. Sin normalizar, las compras nuevas no llegan a la BD. Los depósitos SÍ llegan directos (migrate lee `ibkr_deposits.csv`).
@@ -85,7 +87,7 @@ portfolio_pipeline/
 
 ## 4. Automatización (GitHub Actions) y tokens
 
-`.github/workflows/sync-portfolio.yml` corre los 4 pasos + commit/push, 4×/día en días laborables. **Es el sistema "seamless"**; correr scripts a mano es el fallback.
+`.github/workflows/sync-portfolio.yml` corre los 5 pasos + commit/push, 4×/día en días laborables. **Es el sistema "seamless"**; correr scripts a mano es el fallback.
 
 **Gotchas:**
 - **GitHub desactiva el workflow por inactividad** (`disabled_inactivity`) tras 60 días si los únicos commits son del bot (los auto-commits no cuentan). Reactivar: `gh workflow enable sync-portfolio.yml`. Los commits reales resetean el contador.
@@ -136,6 +138,7 @@ Vercel auto-despliega desde `main`. El servidor local da problemas; verificar en
 | `symbols` | `ticker`, `yfinance_symbol`, `name`, `asset_type` (Stock/ETF/Crypto), `currency`. Sin `region` (geo en código) |
 | `external_positions` | Posiciones no trackeadas en `operations` (fondos Fintual con valor global) |
 | `cash_balances` | Efectivo sin invertir. Poblado desde `ibkr_cash_balance.csv`. Guarda nativo (`currency`, `amount`); la conversión a EUR se hace en `api/dashboard` con FX live |
+| `nav_history` | Valor diario de la cartera (securities) en EUR: `date`, `value_eur`, `net_flow_eur` (flujo neto compras/ventas ese día). Reconstruido por `build_nav_history.py` con precios+FX históricos de Yahoo. Base para el gráfico vs S&P 500 y (futuro) para retornos exactos del item 1. NO incluye el cash ocioso |
 | `fx_rates` | Tipos de cambio históricos |
 
 (La tabla `price_cache` se eliminó — nunca se poblaba ni se leía.)
@@ -249,6 +252,6 @@ Visibilidad y orden se persisten en `localStorage` (`dt-cols-{key}`, `dt-cols-or
 
 **Añadir activo nuevo:** comprarlo en el broker → el sync automático lo integra. Registrar el símbolo en el dict `SYMBOLS` de `migrate_to_sqlite.py` (yfinance_symbol, asset_type, currency, name). Si es USD no-norteamericano, actualizar `TICKER_REGION` (§7). Si su divisa no está en el mapa de `formatPriceOriginal`, añadir el símbolo.
 
-**Actualización manual completa (fallback):** `python3 ibkr_sync.py && python3 normalizar_inversiones.py && python3 migrate_to_sqlite.py && python3 sync_to_turso.py`.
+**Actualización manual completa (fallback):** `python3 ibkr_sync.py && python3 normalizar_inversiones.py && python3 migrate_to_sqlite.py && python3 build_nav_history.py && python3 sync_to_turso.py`.
 
 **Cripto:** BTC/ETH/SOL usan pares `-EUR` de Yahoo con `currency=EUR` (se compraron en EUR en Kraken).

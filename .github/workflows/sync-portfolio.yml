@@ -43,6 +43,10 @@ jobs:
       - name: Migrate to SQLite
         run: python migrate_to_sqlite.py
 
+      - name: Build daily NAV history
+        continue-on-error: true   # depende de Yahoo; si falla, nav_history queda vacía pero no rompe el sync
+        run: python build_nav_history.py
+
       - name: Sync to Turso
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
