@@ -90,7 +90,7 @@ SYMBOL_MAP = {
     'ETH': {'yfinance': 'ETH-EUR', 'asset_type': 'Crypto', 'currency': 'EUR', 'name': 'Ethereum'},
     'SOL': {'yfinance': 'SOL-EUR', 'asset_type': 'Crypto', 'currency': 'EUR', 'name': 'Solana'},
     'CSU': {'yfinance': 'CSU.TO', 'asset_type': 'Stock', 'currency': 'CAD', 'name': 'Constellation Software'},
-    'CSPX': {'yfinance': 'CSPX.L', 'asset_type': 'ETF', 'currency': 'USD', 'name': 'iShares Core S&P 500 UCITS'},
+    'CSPX': {'yfinance': 'IUSA.AS', 'asset_type': 'ETF', 'currency': 'EUR', 'name': 'iShares S&P 500 UCITS'},  # ISIN IE0031442068, comprado en EUR en Ámsterdam (no confundir con CSPX.L Acc en USD)
     'AAPL': {'yfinance': 'AAPL', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Apple Inc.'},
     'META': {'yfinance': 'META', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Meta Platforms'},
     'AMZN': {'yfinance': 'AMZN', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Amazon'},
