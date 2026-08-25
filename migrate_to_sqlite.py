@@ -101,7 +101,7 @@ SYMBOL_MAP = {
     'BABA': {'yfinance': 'BABA', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Alibaba'},
     'TCEHY': {'yfinance': 'TCEHY', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Tencent'},
     'PLTR': {'yfinance': 'PLTR', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Palantir'},
-    'SQ': {'yfinance': 'SQ', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Block Inc.'},
+    'SQ': {'yfinance': 'XYZ', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Block Inc.'},  # SQ renombrado a XYZ (2025)
     'BA': {'yfinance': 'BA', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Boeing'},
     'PINS': {'yfinance': 'PINS', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Pinterest'},
     'BYND': {'yfinance': 'BYND', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Beyond Meat'},

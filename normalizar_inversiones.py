@@ -345,143 +345,113 @@ def procesar_kraken():
             })
 
 
-def _cargar_t212_fechas_missing():
+def _cargar_t212_buys_por_posicion():
     """
-    Carga t212_buy_operations_missing_date.csv y devuelve un dict:
-    {(ticker, round(qty, 4)): [date_str, ...]}  (listas de fechas ordenadas)
-    Si el archivo no existe, devuelve dict vacío.
+    Carga t212_buy_operations_missing_date.csv agrupado por posición (humanId).
+    Devuelve {humanId: [(qty, date_str), ...]} con las compras (y filas artefacto
+    en la fecha de cierre, que se filtran luego por posición).
     """
     from collections import defaultdict
     archivo = DIR / "t212_buy_operations_missing_date.csv"
     if not archivo.exists():
         return {}
-
     lookup = defaultdict(list)
     with open(archivo, "r", encoding="utf-8") as f:
         for row in csv.DictReader(f):
-            ticker = TRADING212_TICKERS.get(row["code"], row["code"].replace("_US_EQ", ""))
-            qty = round(float(row["quantity"]), 4)
-            date_str = row["time"].split(" ")[0]
-            key = (ticker, qty)
-            if date_str not in lookup[key]:
-                lookup[key].append(date_str)
-    for key in lookup:
-        lookup[key].sort()
+            hid = str(row["humanId"]).strip()
+            qty = float(row["quantity"])
+            date_str = row["time"].split(" ")[0].split("T")[0]
+            lookup[hid].append((qty, date_str))
     return dict(lookup)
 
 
-# Cache de fechas T212 (cargado una vez)
-_t212_fechas_cache = None
-
-
-def _get_t212_fecha(ticker, cantidad, precio_compra_usd):
-    """
-    Busca la fecha de compra para una operación T212 usando el archivo de missing dates.
-    Retorna la fecha encontrada o "PENDIENTE".
-    """
-    global _t212_fechas_cache
-    if _t212_fechas_cache is None:
-        _t212_fechas_cache = _cargar_t212_fechas_missing()
-
-    key = (ticker, round(cantidad, 4))
-    candidates = _t212_fechas_cache.get(key, [])
-
-    if not candidates:
-        return "PENDIENTE"
-    if len(candidates) == 1:
-        return candidates[0]
-
-    # Múltiples candidatos: elegir la fecha cuyo precio de mercado sea más cercano
-    best_date = candidates[0]
-    best_diff = float("inf")
-    try:
-        import yfinance as yf
-        for date_str in candidates:
-            end = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=5)).strftime("%Y-%m-%d")
-            hist = yf.Ticker(ticker).history(start=date_str, end=end)
-            if not hist.empty:
-                market_price = float(hist["Close"].iloc[0])
-                diff = abs(market_price - precio_compra_usd)
-                if diff < best_diff:
-                    best_diff = diff
-                    best_date = date_str
-    except Exception:
-        pass
-    return best_date
-
-
 def procesar_trading212_results():
-    """Procesa el archivo de resultados (operaciones cerradas) de Trading212."""
+    """
+    Procesa las posiciones cerradas de Trading212 (broker cerrado forzosamente).
+
+    Cada posición (orderNumber) tiene varias filas de venta en `results` y sus compras
+    reales (con fecha) en el fichero de missing-dates, enlazadas por
+    orderNumber == 'POS' + humanId. Reconstruye:
+      - N operaciones BUY, una por cada FECHA real de compra, repartiendo la cantidad
+        total vendida proporcionalmente a los pesos de esas compras (absorbe splits,
+        p.ej. SHOP 10:1) y preservando el coste total (precio medio ponderado de T212).
+      - 1 operación SELL agregada en la fecha de cierre.
+    """
+    from collections import defaultdict
     archivo = DIR / "trading212_results.csv"
+    buys_por_pos = _cargar_t212_buys_por_posicion()
 
+    posiciones = defaultdict(lambda: {"rows": [], "ticker": None})
     with open(archivo, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
+        for row in csv.DictReader(f):
+            oid = row["orderNumber"].strip()
+            posiciones[oid]["rows"].append(row)
+            posiciones[oid]["ticker"] = TRADING212_TICKERS.get(row["code"], row["code"].replace("_US_EQ", ""))
 
-        for row in reader:
-            code = row["code"]
-            ticker = TRADING212_TICKERS.get(code, code.replace("_US_EQ", ""))
-            cantidad = float(row["quantity"])
+    for oid, pos in posiciones.items():
+        rows = pos["rows"]
+        ticker = pos["ticker"]
+        total_qty = sum(float(r["quantity"]) for r in rows)
+        if total_qty <= 0:
+            continue
 
-            # Precio de compra (en USD y convertido a EUR)
-            precio_compra_usd = float(row["price"])
-            precio_compra_eur = float(row["priceConverted"])
+        # Precios medios ponderados (preservan coste e ingreso totales)
+        buy_usd = sum(float(r["price"]) * float(r["quantity"]) for r in rows) / total_qty
+        buy_eur = sum(float(r["priceConverted"]) * float(r["quantity"]) for r in rows) / total_qty
+        sell_usd = sum(float(r["closePrice"]) * float(r["quantity"]) for r in rows) / total_qty
+        sell_eur = sum(float(r["closePriceConverted"]) * float(r["quantity"]) for r in rows) / total_qty
+        fecha_venta = max(r["time"].split("T")[0] for r in rows)
 
-            # Precio de venta
-            precio_venta_usd = float(row["closePrice"])
-            precio_venta_eur = float(row["closePriceConverted"])
+        tc_compra = buy_usd / buy_eur if buy_eur else 1
+        tc_venta = sell_usd / sell_eur if sell_eur else 1
 
-            # Fecha de venta (la única que tenemos)
-            fecha_venta = row["time"].split("T")[0]
+        # Compras reales = filas missing-date de esta posición ANTERIORES al cierre
+        hid = oid[3:] if oid.startswith("POS") else oid
+        real_buys = [(q, d) for (q, d) in buys_por_pos.get(hid, []) if d < fecha_venta]
+        peso = sum(q for q, _ in real_buys)
+        if not real_buys or peso <= 0:
+            real_buys = [(total_qty, fecha_venta)]  # fallback: no debería ocurrir
+            peso = total_qty
 
-            # Calcular tipo de cambio implícito
-            tc_compra = precio_compra_usd / precio_compra_eur if precio_compra_eur else 1
-            tc_venta = precio_venta_usd / precio_venta_eur if precio_venta_eur else 1
-
-            # Importes
-            importe_compra_eur = cantidad * precio_compra_eur
-            importe_venta_eur = cantidad * precio_venta_eur
-
-            # Fecha de compra: buscar en archivo de missing dates, si no → PENDIENTE
-            fecha_compra = _get_t212_fecha(ticker, cantidad, precio_compra_usd)
-            notas_compra = "" if fecha_compra != "PENDIENTE" else "Fecha de compra pendiente de confirmar"
-
-            # Registrar COMPRA
+        # N COMPRAS (cantidad repartida proporcionalmente → Σ = total_qty)
+        for q_i, date_i in real_buys:
+            cant = total_qty * (q_i / peso)
             todas_operaciones.append({
-                "fecha": fecha_compra,
+                "fecha": date_i,
                 "broker": "Trading212",
                 "tipo_operacion": "BUY",
                 "tipo_activo": "Stock",
                 "ticker": ticker,
                 "isin": "",
-                "cantidad": round(cantidad, 6),
-                "precio_unitario": round(precio_compra_usd, 4),
+                "cantidad": round(cant, 6),
+                "precio_unitario": round(buy_usd, 4),
                 "moneda_original": "USD",
-                "importe_bruto": round(cantidad * precio_compra_usd, 2),
-                "importe_eur": round(importe_compra_eur, 2),
+                "importe_bruto": round(cant * buy_usd, 2),
+                "importe_eur": round(cant * buy_eur, 2),
                 "tipo_cambio": round(tc_compra, 4),
                 "comisiones_eur": 0,
-                "importe_neto_eur": round(-importe_compra_eur, 2),
-                "notas": notas_compra,
-            })
-
-            # Registrar VENTA
-            todas_operaciones.append({
-                "fecha": fecha_venta,
-                "broker": "Trading212",
-                "tipo_operacion": "SELL",
-                "tipo_activo": "Stock",
-                "ticker": ticker,
-                "isin": "",
-                "cantidad": round(cantidad, 6),
-                "precio_unitario": round(precio_venta_usd, 4),
-                "moneda_original": "USD",
-                "importe_bruto": round(cantidad * precio_venta_usd, 2),
-                "importe_eur": round(importe_venta_eur, 2),
-                "tipo_cambio": round(tc_venta, 4),
-                "comisiones_eur": 0,
-                "importe_neto_eur": round(importe_venta_eur, 2),
+                "importe_neto_eur": round(-cant * buy_eur, 2),
                 "notas": "",
             })
+
+        # 1 VENTA agregada en la fecha de cierre
+        todas_operaciones.append({
+            "fecha": fecha_venta,
+            "broker": "Trading212",
+            "tipo_operacion": "SELL",
+            "tipo_activo": "Stock",
+            "ticker": ticker,
+            "isin": "",
+            "cantidad": round(total_qty, 6),
+            "precio_unitario": round(sell_usd, 4),
+            "moneda_original": "USD",
+            "importe_bruto": round(total_qty * sell_usd, 2),
+            "importe_eur": round(total_qty * sell_eur, 2),
+            "tipo_cambio": round(tc_venta, 4),
+            "comisiones_eur": 0,
+            "importe_neto_eur": round(total_qty * sell_eur, 2),
+            "notas": "",
+        })
 
 
 def procesar_trading212_dividends():

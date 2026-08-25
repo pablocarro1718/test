@@ -82,6 +82,8 @@ portfolio_pipeline/
 - **TRAMPA #1:** correr a mano y saltarse el **paso 2** (`normalizar_inversiones.py`). `ibkr_sync.py` escribe `ibkr_transactions.csv` (crudo), pero migrate lee `inversiones_unificadas.csv`. Sin normalizar, las compras nuevas no llegan a la BD. Los depósitos SÍ llegan directos (migrate lee `ibkr_deposits.csv`).
 - **Crítico:** `migrate_to_sqlite.py` **borra y recrea** `portfolio.db` entero cada vez (`DB_PATH.unlink()`). No hay migraciones incrementales; la fuente de verdad son los CSVs.
 - Kraken ya **no se sincroniza** (script eliminado), pero sus holdings históricos (BTC/ETH/SOL, abiertos) se conservan vía `kraken_trades_completo.csv` que `normalizar` sigue leyendo.
+- **Trading212 (cerrado):** las posiciones cerradas se reconstruyen en `procesar_trading212_results()` enlazando `results` (ventas + precio medio) con `t212_buy_operations_missing_date.csv` (compras reales con fecha) por `orderNumber == 'POS'+humanId`. Se emite 1 BUY por cada fecha real de compra (cantidad repartida proporcionalmente → absorbe splits, p.ej. SHOP 10:1) + 1 SELL en el cierre. Coste/ingreso preservados; solo se corrigen las fechas.
+- **Símbolos renombrados/deslistados para Yahoo:** el `yfinance_symbol` en `SYMBOLS` puede diferir del ticker (ej. `SQ`→`XYZ` tras el rebranding de Block). `MAS` (Masmovil) y `TWTR` (Twitter) están deslistados (OPAs) → sin histórico Yahoo → el NAV los valora con proxy de precio medio solo en su tramo (viejo, pequeño, de Degiro).
 
 ---
 
