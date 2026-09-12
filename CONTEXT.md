@@ -2,7 +2,7 @@
 
 > **Propósito:** transferencia total de contexto para continuar el desarrollo con cualquier LLM sin la conversación anterior. **Este archivo es la ÚNICA fuente de verdad del proyecto** — vive en el repo, versionado con el código. La memoria de Claude (`~/.claude/.../memory`) solo apunta aquí; no dupliques contexto allí.
 >
-> Última actualización: 2026-08-16.
+> Última actualización: 2026-08-25.
 
 ---
 
