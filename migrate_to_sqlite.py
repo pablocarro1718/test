@@ -116,6 +116,7 @@ SYMBOL_MAP = {
     'ARGT': {'yfinance': 'ARGT', 'asset_type': 'ETF', 'currency': 'USD', 'name': 'Global X MSCI Argentina ETF'},
     'URA': {'yfinance': 'URA', 'asset_type': 'ETF', 'currency': 'USD', 'name': 'Global X Uranium ETF'},
     'LTRX': {'yfinance': 'LTRX', 'asset_type': 'Stock', 'currency': 'USD', 'name': 'Lantronix'},
+    'IGLN': {'yfinance': 'IGLN.L', 'asset_type': 'ETF', 'currency': 'USD', 'name': 'iShares Physical Gold ETC'},  # ISIN IE00B4ND3602, línea USD de Londres (~$83); SGLN.L es la misma ETC en GBp (~6.160)
 }
 
 # ============================================================

@@ -17,7 +17,7 @@ const TICKER_REGION: Record<string, string> = {
   // Asia / China
   BABA: "Asia", TCEHY: "Asia",
   // Global / thematic (no single geography)
-  URA: "Global",
+  URA: "Global", IGLN: "Global",
 };
 
 function classifyRegion(ticker: string, currency: string, assetType: string): string {

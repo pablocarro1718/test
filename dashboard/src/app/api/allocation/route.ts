@@ -18,7 +18,7 @@ const TICKER_REGION: Record<string, string> = {
   IEV: "Europe",
   ARGT: "Latam", MELI: "Latam", NU: "Latam",
   BABA: "Asia", TCEHY: "Asia",
-  URA: "Global",
+  URA: "Global", IGLN: "Global",
 };
 
 function classifyRegion(ticker: string, currency: string, assetType: string): string {
